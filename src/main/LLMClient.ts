@@ -22,8 +22,8 @@ interface StreamChunk {
 type LLMProvider = "openai" | "anthropic";
 
 const DEFAULT_MODELS: Record<LLMProvider, string> = {
-  openai: "gpt-4o-mini",
-  anthropic: "claude-3-5-sonnet-20241022",
+  openai: "gpt-5.4-mini",
+  anthropic: "claude-sonnet-4-6",
 };
 
 const MAX_CONTEXT_LENGTH = 4000;

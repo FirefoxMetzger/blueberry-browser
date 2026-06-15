@@ -1,0 +1,18 @@
+---
+description: Use the Chrome DevTools MCP to inspect and drive the running Electron app
+alwaysApply: true
+---
+
+# Live Electron app (CDP MCP)
+
+`npm run dev` runs the app with `--remote-debugging-port=9222`, connected to the
+`project-0-blueberry-browser-chrome-devtools` MCP. Use it to reproduce bugs and
+verify fixes live instead of guessing.
+
+- Topbar, sidebar, and each tab are **separate CDP targets**. Use `list_pages`,
+  then `select_page` before `navigate_page` / `evaluate_script` / `take_screenshot`.
+- CDP **cannot** create/close/switch tabs (`Target.createTarget` "Not supported").
+- Drive the main process via preload bridges with `evaluate_script` on the right page:
+  - topbar → `window.topBarAPI` (`createTab(url)`, `closeTab`, `switchTab`, `tabRunJs`, `toggleSidebar`)
+  - sidebar → `window.sidebarAPI` (`sendChatMessage`, `getMessages`, `clearChat`)
+- Reusable snippets for CDP-unreachable actions live in `scripts/`.
