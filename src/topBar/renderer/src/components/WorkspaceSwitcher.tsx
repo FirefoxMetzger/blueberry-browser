@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Check, ChevronDown, X } from "lucide-react";
 import { useBrowser } from "../contexts/BrowserContext";
-import { cn } from "@common/lib/utils";
+import { cn } from "../lib/utils";
 
 export const WorkspaceSwitcher: React.FC = () => {
   const { workspaces, activeWorkspaceId, createWorkspace } = useBrowser();

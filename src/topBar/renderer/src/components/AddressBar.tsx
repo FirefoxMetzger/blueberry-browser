@@ -11,7 +11,7 @@ import { useBrowser } from "../contexts/BrowserContext";
 import { ToolBarButton } from "../components/ToolBarButton";
 import { Favicon } from "../components/Favicon";
 import { DarkModeToggle } from "../components/DarkModeToggle";
-import { cn } from "@common/lib/utils";
+import { cn } from "../lib/utils";
 
 export const AddressBar: React.FC = () => {
   const { activeTab, navigateToUrl, goBack, goForward, reload, isLoading } =

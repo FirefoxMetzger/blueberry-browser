@@ -4,7 +4,7 @@ import { useBrowser } from "../contexts/BrowserContext";
 import { Favicon } from "../components/Favicon";
 import { TabBarButton } from "../components/TabBarButton";
 import { WorkspaceSwitcher } from "../components/WorkspaceSwitcher";
-import { cn } from "@common/lib/utils";
+import { cn } from "../lib/utils";
 
 interface TabItemProps {
   id: string;

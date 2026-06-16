@@ -1,6 +1,6 @@
 import React from "react";
 import { LucideIcon } from "lucide-react";
-import { cn } from "@common/lib/utils";
+import { cn } from "../lib/utils";
 
 interface ToolBarButtonProps {
     Icon?: LucideIcon;

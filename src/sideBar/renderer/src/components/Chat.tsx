@@ -4,8 +4,8 @@ import remarkGfm from 'remark-gfm'
 import remarkBreaks from 'remark-breaks'
 import { ArrowUp, Plus } from 'lucide-react'
 import { useChat } from '../contexts/ChatContext'
-import { cn } from '@common/lib/utils'
-import { Button } from '@common/components/Button'
+import { cn } from '../lib/utils'
+import { Button } from './Button'
 
 interface Message {
     id: string
