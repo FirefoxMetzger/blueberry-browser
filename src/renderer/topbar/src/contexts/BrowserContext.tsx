@@ -58,37 +58,34 @@ export const BrowserProvider: React.FC<{ children: React.ReactNode }> = ({ child
         setIsLoading(true)
         try {
             await window.topBarAPI.createTab(url)
-            await refreshTabs()
         } catch (error) {
             console.error('Failed to create tab:', error)
         } finally {
             setIsLoading(false)
         }
-    }, [refreshTabs])
+    }, [])
 
     const closeTab = useCallback(async (tabId: string) => {
         setIsLoading(true)
         try {
             await window.topBarAPI.closeTab(tabId)
-            await refreshTabs()
         } catch (error) {
             console.error('Failed to close tab:', error)
         } finally {
             setIsLoading(false)
         }
-    }, [refreshTabs])
+    }, [])
 
     const switchTab = useCallback(async (tabId: string) => {
         setIsLoading(true)
         try {
             await window.topBarAPI.switchTab(tabId)
-            await refreshTabs()
         } catch (error) {
             console.error('Failed to switch tab:', error)
         } finally {
             setIsLoading(false)
         }
-    }, [refreshTabs])
+    }, [])
 
     const navigateToUrl = useCallback(async (url: string) => {
         if (!activeTab) return
@@ -96,47 +93,42 @@ export const BrowserProvider: React.FC<{ children: React.ReactNode }> = ({ child
         setIsLoading(true)
         try {
             await window.topBarAPI.navigateTab(activeTab.id, url)
-            // Wait a bit for navigation to start, then refresh tabs to get updated URL
-            setTimeout(() => refreshTabs(), 500)
         } catch (error) {
             console.error('Failed to navigate:', error)
         } finally {
             setIsLoading(false)
         }
-    }, [activeTab, refreshTabs])
+    }, [activeTab])
 
     const goBack = useCallback(async () => {
         if (!activeTab) return
 
         try {
             await window.topBarAPI.goBack(activeTab.id)
-            setTimeout(() => refreshTabs(), 500)
         } catch (error) {
             console.error('Failed to go back:', error)
         }
-    }, [activeTab, refreshTabs])
+    }, [activeTab])
 
     const goForward = useCallback(async () => {
         if (!activeTab) return
 
         try {
             await window.topBarAPI.goForward(activeTab.id)
-            setTimeout(() => refreshTabs(), 500)
         } catch (error) {
             console.error('Failed to go forward:', error)
         }
-    }, [activeTab, refreshTabs])
+    }, [activeTab])
 
     const reload = useCallback(async () => {
         if (!activeTab) return
 
         try {
             await window.topBarAPI.reload(activeTab.id)
-            setTimeout(() => refreshTabs(), 500)
         } catch (error) {
             console.error('Failed to reload:', error)
         }
-    }, [activeTab, refreshTabs])
+    }, [activeTab])
 
     const takeScreenshot = useCallback(async (tabId: string) => {
         try {
@@ -161,11 +153,11 @@ export const BrowserProvider: React.FC<{ children: React.ReactNode }> = ({ child
         refreshTabs()
     }, [refreshTabs])
 
-    // Periodic refresh to keep tabs in sync
+    // Keep tabs in sync from main-process tab lifecycle/navigation events.
     useEffect(() => {
-        const interval = setInterval(refreshTabs, 2000) // Refresh every 2 seconds
-        return () => clearInterval(interval)
-    }, [refreshTabs])
+        window.topBarAPI.onTabsUpdated(setTabs)
+        return () => window.topBarAPI.removeTabsUpdatedListener()
+    }, [])
 
     const value: BrowserContextType = {
         tabs,

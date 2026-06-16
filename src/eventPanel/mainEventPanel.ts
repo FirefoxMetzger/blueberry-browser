@@ -2,7 +2,9 @@ import { is } from "@electron-toolkit/utils";
 import { BaseWindow, WebContentsView } from "electron";
 import { join } from "path";
 
-export class TopBar {
+export const EVENT_PANEL_WIDTH = 280;
+
+export class EventPanel {
   private webContentsView: WebContentsView;
   private baseWindow: BaseWindow;
 
@@ -16,24 +18,22 @@ export class TopBar {
   private createWebContentsView(): WebContentsView {
     const webContentsView = new WebContentsView({
       webPreferences: {
-        preload: join(__dirname, "../preload/topbar.js"),
+        preload: join(__dirname, "../preload/preloadEventPanel.js"),
         nodeIntegration: false,
         contextIsolation: true,
-        sandbox: false, // Need to disable sandbox for preload to work
+        sandbox: false,
       },
     });
 
-    // Load the TopBar React app
     if (is.dev && process.env["ELECTRON_RENDERER_URL"]) {
-      // In development, load through Vite dev server
-      const topbarUrl = new URL(
-        "/renderer/topbar/",
-        process.env["ELECTRON_RENDERER_URL"]
+      const eventPanelUrl = new URL(
+        "/eventPanel/renderer/",
+        process.env["ELECTRON_RENDERER_URL"],
       );
-      webContentsView.webContents.loadURL(topbarUrl.toString());
+      webContentsView.webContents.loadURL(eventPanelUrl.toString());
     } else {
       webContentsView.webContents.loadFile(
-        join(__dirname, "../renderer/renderer/topbar/index.html")
+        join(__dirname, "../renderer/eventPanel/renderer/index.html"),
       );
     }
 
@@ -44,9 +44,9 @@ export class TopBar {
     const bounds = this.baseWindow.getBounds();
     this.webContentsView.setBounds({
       x: 0,
-      y: 0,
-      width: bounds.width,
-      height: 88, // Fixed height for topbar (40px tabs + 48px address bar)
+      y: 88,
+      width: EVENT_PANEL_WIDTH,
+      height: bounds.height - 88,
     });
   }
 

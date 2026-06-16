@@ -6,11 +6,17 @@ export class Tab {
   private _title: string;
   private _url: string;
   private _isVisible: boolean = false;
+  private onStateChanged: (() => void) | undefined;
 
-  constructor(id: string, url: string = "https://www.google.com") {
+  constructor(
+    id: string,
+    url: string = "https://www.google.com",
+    onStateChanged?: () => void
+  ) {
     this._id = id;
     this._url = url;
     this._title = "New Tab";
+    this.onStateChanged = onStateChanged;
 
     // Create the WebContentsView for web content only
     this.webContentsView = new WebContentsView({
@@ -33,16 +39,23 @@ export class Tab {
     // Update title when page title changes
     this.webContentsView.webContents.on("page-title-updated", (_, title) => {
       this._title = title;
+      this.notifyStateChanged();
     });
 
     // Update URL when navigation occurs
     this.webContentsView.webContents.on("did-navigate", (_, url) => {
       this._url = url;
+      this.notifyStateChanged();
     });
 
     this.webContentsView.webContents.on("did-navigate-in-page", (_, url) => {
       this._url = url;
+      this.notifyStateChanged();
     });
+  }
+
+  private notifyStateChanged(): void {
+    this.onStateChanged?.();
   }
 
   // Getters
@@ -99,6 +112,7 @@ export class Tab {
 
   loadURL(url: string): Promise<void> {
     this._url = url;
+    this.notifyStateChanged();
     return this.webContentsView.webContents.loadURL(url);
   }
 

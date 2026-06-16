@@ -15,6 +15,8 @@ interface TopBarAPI {
   closeTab: (tabId: string) => Promise<boolean>;
   switchTab: (tabId: string) => Promise<boolean>;
   getTabs: () => Promise<TabInfo[]>;
+  onTabsUpdated: (callback: (tabs: TabInfo[]) => void) => void;
+  removeTabsUpdatedListener: () => void;
 
   // Tab navigation
   navigateTab: (tabId: string, url: string) => Promise<void>;
@@ -24,7 +26,7 @@ interface TopBarAPI {
 
   // Tab actions
   tabScreenshot: (tabId: string) => Promise<string | null>;
-  tabRunJs: (tabId: string, code: string) => Promise<any>;
+  tabRunJs: (tabId: string, code: string) => Promise<unknown>;
 
   // Sidebar
   toggleSidebar: () => Promise<void>;

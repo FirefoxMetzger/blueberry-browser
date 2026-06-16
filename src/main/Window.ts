@@ -2,6 +2,7 @@ import { BaseWindow, shell } from "electron";
 import { Tab } from "./Tab";
 import { TopBar } from "./TopBar";
 import { SideBar } from "./SideBar";
+import { EventPanel, EVENT_PANEL_WIDTH } from "../eventPanel/mainEventPanel";
 
 export class Window {
   private _baseWindow: BaseWindow;
@@ -10,6 +11,8 @@ export class Window {
   private tabCounter: number = 0;
   private _topBar: TopBar;
   private _sideBar: SideBar;
+  private _eventPanel: EventPanel;
+  private tabsChangedListeners = new Set<() => void>();
 
   constructor() {
     // Create the browser window.
@@ -26,6 +29,7 @@ export class Window {
     this._baseWindow.setMinimumSize(1000, 800);
 
     this._topBar = new TopBar(this._baseWindow);
+    this._eventPanel = new EventPanel(this._baseWindow);
     this._sideBar = new SideBar(this._baseWindow);
 
     // Set the window reference on the LLM client to avoid circular dependency
@@ -38,6 +42,7 @@ export class Window {
     this._baseWindow.on("resize", () => {
       this.updateTabBounds();
       this._topBar.updateBounds();
+      this._eventPanel.updateBounds();
       this._sideBar.updateBounds();
       // Notify renderer of resize through active tab
       const bounds = this._baseWindow.getBounds();
@@ -91,17 +96,17 @@ export class Window {
   // Tab management methods
   createTab(url?: string): Tab {
     const tabId = `tab-${++this.tabCounter}`;
-    const tab = new Tab(tabId, url);
+    const tab = new Tab(tabId, url, () => this.notifyTabsChanged());
 
     // Add the tab's WebContentsView to the window
     this._baseWindow.contentView.addChildView(tab.view);
 
-    // Set the bounds to fill the window below the topbar and to the left of sidebar
+    // Set the bounds to fill the window below the topbar, between the side panels.
     const bounds = this._baseWindow.getBounds();
     tab.view.setBounds({
-      x: 0,
+      x: EVENT_PANEL_WIDTH,
       y: 88, // Start below the topbar
-      width: bounds.width - 400, // Subtract sidebar width
+      width: bounds.width - EVENT_PANEL_WIDTH - 400, // Subtract panel widths
       height: bounds.height - 88, // Subtract topbar height
     });
 
@@ -115,6 +120,8 @@ export class Window {
       // Hide the tab initially if it's not the first one
       tab.hide();
     }
+
+    this.notifyTabsChanged();
 
     return tab;
   }
@@ -148,6 +155,8 @@ export class Window {
       this._baseWindow.close();
     }
 
+    this.notifyTabsChanged();
+
     return true;
   }
 
@@ -172,7 +181,20 @@ export class Window {
     // Update the window title to match the tab title
     this._baseWindow.setTitle(tab.title || "Blueberry Browser");
 
+    this.notifyTabsChanged();
+
     return true;
+  }
+
+  onTabsChanged(listener: () => void): () => void {
+    this.tabsChangedListeners.add(listener);
+    return () => this.tabsChangedListeners.delete(listener);
+  }
+
+  private notifyTabsChanged(): void {
+    for (const listener of this.tabsChangedListeners) {
+      listener();
+    }
   }
 
   getTab(tabId: string): Tab | null {
@@ -237,9 +259,9 @@ export class Window {
 
     this.tabsMap.forEach((tab) => {
       tab.view.setBounds({
-        x: 0,
+        x: EVENT_PANEL_WIDTH,
         y: 88, // Start below the topbar
-        width: bounds.width - sidebarWidth,
+        width: bounds.width - EVENT_PANEL_WIDTH - sidebarWidth,
         height: bounds.height - 88, // Subtract topbar height
       });
     });
@@ -248,12 +270,17 @@ export class Window {
   // Public method to update all bounds when sidebar is toggled
   updateAllBounds(): void {
     this.updateTabBounds();
+    this._eventPanel.updateBounds();
     this._sideBar.updateBounds();
   }
 
   // Getter for sidebar to access from main process
   get sidebar(): SideBar {
     return this._sideBar;
+  }
+
+  get eventPanel(): EventPanel {
+    return this._eventPanel;
   }
 
   // Getter for topBar to access from main process

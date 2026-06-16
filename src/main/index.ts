@@ -2,7 +2,7 @@ import { app, BrowserWindow } from "electron";
 import { electronApp } from "@electron-toolkit/utils";
 import { Window } from "./Window";
 import { AppMenu } from "./Menu";
-import { EventManager } from "./EventManager";
+import { EventManager } from "./events/EventManager";
 import { eventDatabase } from "./events";
 
 let mainWindow: Window | null = null;

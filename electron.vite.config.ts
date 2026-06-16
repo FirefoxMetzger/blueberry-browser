@@ -13,17 +13,22 @@ export default defineConfig({
         input: {
           topbar: resolve(__dirname, "src/preload/topbar.ts"),
           sidebar: resolve(__dirname, "src/preload/sidebar.ts"),
+          preloadEventPanel: resolve(
+            __dirname,
+            "src/eventPanel/preloadEventPanel.ts",
+          ),
         },
       },
     },
   },
   renderer: {
-    root: "src/renderer",
+    root: "src",
     build: {
       rollupOptions: {
         input: {
           topbar: resolve(__dirname, "src/renderer/topbar/index.html"),
           sidebar: resolve(__dirname, "src/renderer/sidebar/index.html"),
+          eventpanel: resolve(__dirname, "src/eventPanel/renderer/index.html"),
         },
       },
     },

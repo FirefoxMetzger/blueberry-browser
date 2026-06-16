@@ -11,6 +11,12 @@ const topBarAPI = {
   switchTab: (tabId: string) =>
     electronAPI.ipcRenderer.invoke("switch-tab", tabId),
   getTabs: () => electronAPI.ipcRenderer.invoke("get-tabs"),
+  onTabsUpdated: (callback: (tabs: unknown[]) => void) => {
+    electronAPI.ipcRenderer.on("tabs-updated", (_, tabs) => callback(tabs));
+  },
+  removeTabsUpdatedListener: () => {
+    electronAPI.ipcRenderer.removeAllListeners("tabs-updated");
+  },
 
   // Tab navigation
   navigateTab: (tabId: string, url: string) =>

@@ -4,9 +4,9 @@ import {
   IpcMainInvokeEvent,
   WebContents,
 } from "electron";
-import type { Window } from "./Window";
-import { eventDatabase } from "./events";
-import type { Event } from "./events";
+import type { Window } from "../Window";
+import { eventDatabase } from "./database";
+import type { Event } from "./types";
 
 type EventMetadata =
   | { sender: number; kind: "invoke" | "on" }
@@ -14,9 +14,13 @@ type EventMetadata =
 
 export class EventManager {
   private mainWindow: Window;
+  private removeTabsChangedListener: (() => void) | undefined;
 
   constructor(mainWindow: Window) {
     this.mainWindow = mainWindow;
+    this.removeTabsChangedListener = this.mainWindow.onTabsChanged(() =>
+      this.broadcastTabsUpdated(),
+    );
     this.setupEventHandlers();
   }
 
@@ -38,13 +42,13 @@ export class EventManager {
 
     // Database query (not wrapped to avoid feedback loop)
     ipcMain.handle("db-query", (_e, sql: string, params: unknown[] = []) =>
-      eventDatabase.query(sql, params)
+      eventDatabase.query(sql, params),
     );
   }
 
   private handle<T extends unknown[]>(
     channel: string,
-    handler: (event: IpcMainInvokeEvent, ...args: T) => unknown
+    handler: (event: IpcMainInvokeEvent, ...args: T) => unknown,
   ): void {
     ipcMain.handle(channel, async (event, ...args) => {
       this.logAndBroadcast(channel, args, {
@@ -57,7 +61,7 @@ export class EventManager {
 
   private on<T extends unknown[]>(
     channel: string,
-    listener: (event: IpcMainEvent, ...args: T) => void
+    listener: (event: IpcMainEvent, ...args: T) => void,
   ): void {
     ipcMain.on(channel, (event, ...args) => {
       this.logAndBroadcast(channel, args, {
@@ -71,7 +75,7 @@ export class EventManager {
   private logAndBroadcast(
     channel: string,
     args: unknown[],
-    metadata: EventMetadata
+    metadata: EventMetadata,
   ): void {
     const event = eventDatabase.publish(
       channel,
@@ -79,7 +83,7 @@ export class EventManager {
       args,
       "rpc-args",
       metadata,
-      "rpc-meta"
+      "rpc-meta",
     );
     this.broadcastEvent(event);
   }
@@ -93,7 +97,30 @@ export class EventManager {
 
   private broadcastEvent(event: Event): void {
     this.mainWindow.topBar.view.webContents.send("event-logged", event);
+    this.mainWindow.eventPanel.view.webContents.send("event-logged", event);
     this.mainWindow.sidebar.view.webContents.send("event-logged", event);
+  }
+
+  private getTabsSnapshot(): {
+    id: string;
+    title: string;
+    url: string;
+    isActive: boolean;
+  }[] {
+    const activeTabId = this.mainWindow.activeTab?.id;
+    return this.mainWindow.allTabs.map((tab) => ({
+      id: tab.id,
+      title: tab.title,
+      url: tab.url,
+      isActive: activeTabId === tab.id,
+    }));
+  }
+
+  private broadcastTabsUpdated(): void {
+    this.mainWindow.topBar.view.webContents.send(
+      "tabs-updated",
+      this.getTabsSnapshot(),
+    );
   }
 
   private handleTabEvents(): void {
@@ -115,13 +142,7 @@ export class EventManager {
 
     // Get tabs
     this.handle("get-tabs", () => {
-      const activeTabId = this.mainWindow.activeTab?.id;
-      return this.mainWindow.allTabs.map((tab) => ({
-        id: tab.id,
-        title: tab.title,
-        url: tab.url,
-        isActive: activeTabId === tab.id,
-      }));
+      return this.getTabsSnapshot();
     });
 
     // Navigation (for compatibility with existing code)
@@ -228,10 +249,13 @@ export class EventManager {
     });
 
     // Chat message
-    this.handle("sidebar-chat-message", async (_, request: { message: string; messageId: string }) => {
-      // The LLMClient now handles getting the screenshot and context directly
-      await this.mainWindow.sidebar.client.sendChatMessage(request);
-    });
+    this.handle(
+      "sidebar-chat-message",
+      async (_, request: { message: string; messageId: string }) => {
+        // The LLMClient now handles getting the screenshot and context directly
+        await this.mainWindow.sidebar.client.sendChatMessage(request);
+      },
+    );
 
     // Clear chat
     this.handle("sidebar-clear-chat", () => {
@@ -298,7 +322,15 @@ export class EventManager {
     if (this.mainWindow.topBar.view.webContents !== sender) {
       this.mainWindow.topBar.view.webContents.send(
         "dark-mode-updated",
-        isDarkMode
+        isDarkMode,
+      );
+    }
+
+    // Send to event panel
+    if (this.mainWindow.eventPanel.view.webContents !== sender) {
+      this.mainWindow.eventPanel.view.webContents.send(
+        "dark-mode-updated",
+        isDarkMode,
       );
     }
 
@@ -306,7 +338,7 @@ export class EventManager {
     if (this.mainWindow.sidebar.view.webContents !== sender) {
       this.mainWindow.sidebar.view.webContents.send(
         "dark-mode-updated",
-        isDarkMode
+        isDarkMode,
       );
     }
 
@@ -320,6 +352,7 @@ export class EventManager {
 
   // Clean up event listeners
   public cleanup(): void {
+    this.removeTabsChangedListener?.();
     ipcMain.removeAllListeners();
   }
 }
