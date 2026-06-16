@@ -1,7 +1,7 @@
 import { app, BrowserWindow } from "electron";
 import { electronApp } from "@electron-toolkit/utils";
 import { Window } from "./Window";
-import { AppMenu } from "../menuBar/Menu";
+import { AppMenu } from "../menuBar/mainMenu";
 import { EventManager } from "./events/EventManager";
 import { eventDatabase } from "./events";
 import { DarkModeManager } from "../darkMode/mainDarkMode";
