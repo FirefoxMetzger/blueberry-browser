@@ -29,7 +29,6 @@ interface SidebarAPI {
   removeMessagesUpdatedListener: () => void;
 
   // Page content access
-  getPageContent: () => Promise<string | null>;
   getPageText: () => Promise<string | null>;
   getCurrentUrl: () => Promise<string | null>;
 

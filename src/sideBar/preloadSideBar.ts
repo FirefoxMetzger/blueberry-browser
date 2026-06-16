@@ -41,7 +41,6 @@ const sidebarAPI = {
   },
 
   // Page content access
-  getPageContent: () => electronAPI.ipcRenderer.invoke("get-page-content"),
   getPageText: () => electronAPI.ipcRenderer.invoke("get-page-text"),
   getCurrentUrl: () => electronAPI.ipcRenderer.invoke("get-current-url"),
 

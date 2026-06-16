@@ -241,10 +241,18 @@ export class WorkspaceManager {
     });
   }
 
-  private getWorkspaceTopic(workspaceId: string): string {
-    return workspaceId === DEFAULT_WORKSPACE_ID
-      ? DEFAULT_WORKSPACE_TOPIC
-      : workspaceTopic(workspaceId);
+  getWorkspaceTopic(workspaceId: string): string {
+    if (workspaceId === DEFAULT_WORKSPACE_ID) {
+      return DEFAULT_WORKSPACE_TOPIC;
+    }
+
+    const workspace = this.projection.workspaces.get(workspaceId);
+    return workspace?.topic ?? workspaceTopic(workspaceId);
+  }
+
+  getTabWorkspaceTopic(windowId: string, tabId: string): string | null {
+    const workspaceId = this.findTabWorkspace(tabId, windowId);
+    return workspaceId ? this.getWorkspaceTopic(workspaceId) : null;
   }
 
   private findTabWorkspace(tabId: string, windowId: string): string | null {
@@ -386,6 +394,12 @@ export class WorkspaceManager {
       return false;
     }
 
+    const topic = this.getWorkspaceTopic(workspaceId);
+    this.publishDomainEvent(topic, "workspace-switched", {
+      windowId,
+      workspaceId,
+    });
+
     this.windowWorkspaceSelection.set(windowId, workspaceId);
 
     const tabIds = this.getWorkspaceTabIds(workspaceId);
@@ -446,8 +460,15 @@ export class WorkspaceManager {
       return null;
     }
 
+    const hasDuplicateName = Array.from(
+      this.projection.workspaces.values(),
+    ).some((workspace) => workspace.name === trimmed);
+    if (hasDuplicateName) {
+      return null;
+    }
+
     const workspaceId = createWorkspaceId();
-    const topic = workspaceTopic(workspaceId);
+    const topic = workspaceTopic(trimmed);
 
     this.publishDomainEvent(topic, "workspace-created", {
       workspaceId,
@@ -525,7 +546,7 @@ export class WorkspaceManager {
     const moveId = createMoveId();
 
     const sourceTopic = this.getWorkspaceTopic(sourceWorkspaceId);
-    const targetTopic = workspaceTopic(targetWorkspaceId);
+    const targetTopic = this.getWorkspaceTopic(targetWorkspaceId);
 
     this.publishDomainEvents([
       {

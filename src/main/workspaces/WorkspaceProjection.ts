@@ -20,11 +20,12 @@ import {
 function createEmptyWorkspaceState(
   workspaceId: string,
   name: string,
+  topic = workspaceTopic(name),
 ): WorkspaceState {
   return {
     id: workspaceId,
     name,
-    topic: workspaceTopic(workspaceId),
+    topic,
     tabOrder: [],
     tabs: new Map(),
     lastActiveTabId: null,
@@ -88,6 +89,7 @@ function applyWorkspaceEvent(
       const workspace = projection.workspaces.get(workspaceId);
       if (workspace) {
         workspace.name = name;
+        workspace.topic = workspaceTopic(name);
       }
       break;
     }
@@ -99,6 +101,22 @@ function applyWorkspaceEvent(
     default:
       break;
   }
+}
+
+function getWorkspaceByTopic(
+  projection: GlobalWorkspaceProjection,
+  topic: string,
+): WorkspaceState | undefined {
+  for (const workspace of projection.workspaces.values()) {
+    if (workspace.topic === topic) {
+      return workspace;
+    }
+  }
+
+  const legacyWorkspaceId = parseWorkspaceTopic(topic);
+  return legacyWorkspaceId
+    ? projection.workspaces.get(legacyWorkspaceId)
+    : undefined;
 }
 
 function applyTabEventToWorkspace(
@@ -243,17 +261,20 @@ export function applyEventRow(
     return;
   }
 
-  const workspaceId = parseWorkspaceTopic(topic);
-  if (!workspaceId) {
+  if (!parseWorkspaceTopic(topic)) {
     return;
   }
 
-  let workspace = projection.workspaces.get(workspaceId);
+  let workspace = getWorkspaceByTopic(projection, topic);
   if (!workspace && payloadType === "tab-moved") {
     const move = payload as TabMovedPayload;
     if (move.direction === "in") {
-      workspace = createEmptyWorkspaceState(workspaceId, workspaceId);
-      projection.workspaces.set(workspaceId, workspace);
+      workspace = createEmptyWorkspaceState(
+        move.toWorkspaceId,
+        move.toWorkspaceId,
+        topic,
+      );
+      projection.workspaces.set(move.toWorkspaceId, workspace);
     }
   }
 

@@ -7,18 +7,36 @@ import {
 } from "electron";
 import type { Window } from "../Window";
 import type { WorkspaceManager } from "../workspaces/WorkspaceManager";
+import { DEFAULT_WORKSPACE_TOPIC, workspaceTopic } from "../workspaces/types";
 import { eventDatabase } from "./database";
 import type { Event } from "./types";
 
-const DEFAULT_EVENT_TOPIC = "default";
+const DEFAULT_EVENT_TOPIC = DEFAULT_WORKSPACE_TOPIC;
+const LATEST_WORKSPACE_SWITCH_QUERY = `
+  SELECT topic
+  FROM events
+  WHERE payload_type = 'workspace-switched'
+    AND json_extract(payload, '$.windowId') = ?
+  ORDER BY id DESC
+  LIMIT 1
+`;
 
 type EventMetadata =
   | { sender: number; kind: "invoke" | "on" }
   | { kind: "menu"; source: "application-menu" };
+type EventTopicResolver = (...args: unknown[]) => string;
+type EventHandlerOptions = {
+  skipRpcLog?: boolean;
+  topic?: string | EventTopicResolver;
+};
 
 interface PopupPoint {
   x: number;
   y: number;
+}
+
+interface WorkspaceSwitchEventRow {
+  topic: string;
 }
 
 export class EventManager {
@@ -44,7 +62,6 @@ export class EventManager {
     this.handleWorkspaceEvents();
     this.handleSidebarEvents();
     this.handlePageContentEvents();
-    this.handleDebugEvents();
 
     ipcMain.handle("db-query", (_e, sql: string, params?: unknown) => {
       const boundParams = Array.isArray(params)
@@ -59,14 +76,19 @@ export class EventManager {
   private handle<T extends unknown[]>(
     channel: string,
     handler: (event: IpcMainInvokeEvent, ...args: T) => unknown,
-    options?: { skipRpcLog?: boolean },
+    options?: EventHandlerOptions,
   ): void {
     ipcMain.handle(channel, async (event, ...args) => {
       if (!options?.skipRpcLog) {
-        this.logAndBroadcast(channel, args, {
-          sender: event.sender.id,
-          kind: "invoke",
-        });
+        this.logAndBroadcast(
+          channel,
+          args,
+          {
+            sender: event.sender.id,
+            kind: "invoke",
+          },
+          this.resolveEventTopic(options?.topic, args),
+        );
       }
       return await handler(event, ...(args as T));
     });
@@ -89,9 +111,10 @@ export class EventManager {
     channel: string,
     args: unknown[],
     metadata: EventMetadata,
+    topic = DEFAULT_EVENT_TOPIC,
   ): void {
     const event = eventDatabase.publish(
-      DEFAULT_EVENT_TOPIC,
+      topic,
       1,
       args,
       channel,
@@ -102,10 +125,65 @@ export class EventManager {
   }
 
   public publishMenuAction(channel: string, args: unknown[] = []): void {
-    this.logAndBroadcast(channel, args, {
-      kind: "menu",
-      source: "application-menu",
-    });
+    this.logAndBroadcast(
+      channel,
+      args,
+      {
+        kind: "menu",
+        source: "application-menu",
+      },
+      this.getMenuActionTopic(channel),
+    );
+  }
+
+  private resolveEventTopic(
+    topic?: string | EventTopicResolver,
+    args: unknown[] = [],
+  ): string {
+    return typeof topic === "function"
+      ? topic(...args)
+      : (topic ?? DEFAULT_EVENT_TOPIC);
+  }
+
+  private getActiveWorkspaceTopicFromHistory(): string {
+    const [row] = eventDatabase.query<WorkspaceSwitchEventRow>(
+      LATEST_WORKSPACE_SWITCH_QUERY,
+      [this.mainWindow.id],
+    );
+
+    return row?.topic ?? DEFAULT_EVENT_TOPIC;
+  }
+
+  private getActiveTabWorkspaceTopic(): string {
+    const activeTabId = this.mainWindow.activeTab?.id;
+    return activeTabId
+      ? this.getTabWorkspaceTopic(activeTabId)
+      : this.getActiveWorkspaceTopicFromHistory();
+  }
+
+  private getTabWorkspaceTopic(tabId: unknown): string {
+    if (typeof tabId !== "string") {
+      return this.getActiveTabWorkspaceTopic();
+    }
+
+    return (
+      this.workspaceManager.getTabWorkspaceTopic(this.mainWindow.id, tabId) ??
+      this.getActiveWorkspaceTopicFromHistory()
+    );
+  }
+
+  private getMenuActionTopic(channel: string): string {
+    switch (channel) {
+      case "close-tab":
+      case "reload":
+      case "force-reload":
+      case "toggle-dev-tools":
+      case "go-back":
+      case "go-forward":
+        return this.getActiveTabWorkspaceTopic();
+      default:
+        return this.getActiveWorkspaceTopicFromHistory();
+    }
   }
 
   public broadcastEvent(event: Event): void {
@@ -130,99 +208,177 @@ export class EventManager {
 
   private handleTabEvents(): void {
     const windowId = (): string => this.mainWindow.id;
+    const activeWorkspaceTopic = (): string =>
+      this.getActiveWorkspaceTopicFromHistory();
+    const activeTabWorkspaceTopic = (): string =>
+      this.getActiveTabWorkspaceTopic();
+    const tabWorkspaceTopic = (tabId: unknown): string =>
+      this.getTabWorkspaceTopic(tabId);
 
-    this.handle("create-tab", (_, url?: string) => {
-      return this.workspaceManager.createTab(
-        windowId(),
-        url ?? "https://www.google.com",
-      );
-    });
+    this.handle(
+      "create-tab",
+      (_, url?: string) => {
+        return this.workspaceManager.createTab(
+          windowId(),
+          url ?? "https://www.google.com",
+        );
+      },
+      { topic: activeWorkspaceTopic },
+    );
 
-    this.handle("close-tab", (_, id: string) => {
-      this.workspaceManager.closeTab(windowId(), id);
-    });
+    this.handle(
+      "close-tab",
+      (_, id: string) => {
+        this.workspaceManager.closeTab(windowId(), id);
+      },
+      { topic: tabWorkspaceTopic },
+    );
 
-    this.handle("switch-tab", (_, id: string) => {
-      this.workspaceManager.switchTab(windowId(), id);
-    });
+    this.handle(
+      "switch-tab",
+      (_, id: string) => {
+        this.workspaceManager.switchTab(windowId(), id);
+      },
+      { topic: tabWorkspaceTopic },
+    );
 
-    this.handle("get-tabs", () => {
-      return this.workspaceManager.getSnapshot(windowId()).tabs;
-    });
+    this.handle(
+      "get-tabs",
+      () => {
+        return this.workspaceManager.getSnapshot(windowId()).tabs;
+      },
+      { topic: activeWorkspaceTopic },
+    );
 
-    this.handle("navigate-to", (_, url: string) => {
-      const activeTab = this.mainWindow.activeTab;
-      if (activeTab) {
-        this.workspaceManager.handleNavigateTab(windowId(), activeTab.id, url);
-      }
-    });
+    this.handle(
+      "navigate-to",
+      (_, url: string) => {
+        const activeTab = this.mainWindow.activeTab;
+        if (activeTab) {
+          this.workspaceManager.handleNavigateTab(windowId(), activeTab.id, url);
+        }
+      },
+      { topic: activeTabWorkspaceTopic },
+    );
 
-    this.handle("navigate-tab", async (_, tabId: string, url: string) => {
-      this.workspaceManager.handleNavigateTab(windowId(), tabId, url);
-      return true;
-    });
+    this.handle(
+      "navigate-tab",
+      async (_, tabId: string, url: string) => {
+        this.workspaceManager.handleNavigateTab(windowId(), tabId, url);
+        return true;
+      },
+      { topic: tabWorkspaceTopic },
+    );
 
-    this.handle("go-back", () => {
-      this.mainWindow.activeTab?.goBack();
-    });
+    this.handle(
+      "go-back",
+      () => {
+        this.mainWindow.activeTab?.goBack();
+      },
+      { topic: activeTabWorkspaceTopic },
+    );
 
-    this.handle("go-forward", () => {
-      this.mainWindow.activeTab?.goForward();
-    });
+    this.handle(
+      "go-forward",
+      () => {
+        this.mainWindow.activeTab?.goForward();
+      },
+      { topic: activeTabWorkspaceTopic },
+    );
 
-    this.handle("reload", () => {
-      this.mainWindow.activeTab?.reload();
-    });
+    this.handle(
+      "reload",
+      () => {
+        this.mainWindow.activeTab?.reload();
+      },
+      { topic: activeTabWorkspaceTopic },
+    );
 
-    this.handle("tab-go-back", (_, tabId: string) => {
-      this.mainWindow.getTab(tabId)?.goBack();
-      return true;
-    });
+    this.handle(
+      "tab-go-back",
+      (_, tabId: string) => {
+        this.mainWindow.getTab(tabId)?.goBack();
+        return true;
+      },
+      { topic: tabWorkspaceTopic },
+    );
 
-    this.handle("tab-go-forward", (_, tabId: string) => {
-      this.mainWindow.getTab(tabId)?.goForward();
-      return true;
-    });
+    this.handle(
+      "tab-go-forward",
+      (_, tabId: string) => {
+        this.mainWindow.getTab(tabId)?.goForward();
+        return true;
+      },
+      { topic: tabWorkspaceTopic },
+    );
 
-    this.handle("tab-reload", (_, tabId: string) => {
-      this.mainWindow.getTab(tabId)?.reload();
-      return true;
-    });
+    this.handle(
+      "tab-reload",
+      (_, tabId: string) => {
+        this.mainWindow.getTab(tabId)?.reload();
+        return true;
+      },
+      { topic: tabWorkspaceTopic },
+    );
 
-    this.handle("tab-screenshot", async (_, tabId: string) => {
-      const tab = this.mainWindow.getTab(tabId);
-      if (tab) {
-        const image = await tab.screenshot();
-        return image.toDataURL();
-      }
-      return null;
-    });
+    this.handle(
+      "tab-screenshot",
+      async (_, tabId: string) => {
+        const tab = this.mainWindow.getTab(tabId);
+        if (tab) {
+          const image = await tab.screenshot();
+          return image.toDataURL();
+        }
+        return null;
+      },
+      { topic: tabWorkspaceTopic },
+    );
 
-    this.handle("tab-run-js", async (_, tabId: string, code: string) => {
-      const tab = this.mainWindow.getTab(tabId);
-      if (tab) {
-        return await tab.runJs(code);
-      }
-      return null;
-    });
+    this.handle(
+      "tab-run-js",
+      async (_, tabId: string, code: string) => {
+        const tab = this.mainWindow.getTab(tabId);
+        if (tab) {
+          return await tab.runJs(code);
+        }
+        return null;
+      },
+      { topic: tabWorkspaceTopic },
+    );
 
-    this.handle("get-active-tab-info", () => {
-      const activeTab = this.mainWindow.activeTab;
-      if (activeTab) {
-        return {
-          id: activeTab.id,
-          url: activeTab.url,
-          title: activeTab.title,
-          canGoBack: activeTab.webContents.canGoBack(),
-          canGoForward: activeTab.webContents.canGoForward(),
-        };
-      }
-      return null;
-    });
+    this.handle(
+      "get-active-tab-info",
+      () => {
+        const activeTab = this.mainWindow.activeTab;
+        if (activeTab) {
+          return {
+            id: activeTab.id,
+            url: activeTab.url,
+            title: activeTab.title,
+            canGoBack: activeTab.webContents.canGoBack(),
+            canGoForward: activeTab.webContents.canGoForward(),
+          };
+        }
+        return null;
+      },
+      { topic: activeTabWorkspaceTopic },
+    );
   }
 
   private handleWorkspaceEvents(): void {
     const windowId = (): string => this.mainWindow.id;
+    const activeWorkspaceTopic = (): string =>
+      this.getActiveWorkspaceTopicFromHistory();
+    const tabWorkspaceTopic = (tabId: unknown): string =>
+      this.getTabWorkspaceTopic(tabId);
+    const topicForWorkspaceId = (workspaceId: unknown): string =>
+      typeof workspaceId === "string"
+        ? this.workspaceManager.getWorkspaceTopic(workspaceId)
+        : activeWorkspaceTopic();
+    const topicForWorkspaceName = (name: unknown): string => {
+      const trimmed = typeof name === "string" ? name.trim() : "";
+      return trimmed ? workspaceTopic(trimmed) : DEFAULT_EVENT_TOPIC;
+    };
 
     this.handle(
       "get-workspaces",
@@ -236,17 +392,29 @@ export class EventManager {
       { skipRpcLog: true },
     );
 
-    this.handle("create-workspace", (_, name: string) => {
-      return this.workspaceManager.createWorkspace(windowId(), name);
-    });
+    this.handle(
+      "create-workspace",
+      (_, name: string) => {
+        return this.workspaceManager.createWorkspace(windowId(), name);
+      },
+      { topic: topicForWorkspaceName },
+    );
 
-    this.handle("remove-workspace", (_, workspaceId: string) => {
-      return this.workspaceManager.removeWorkspace(windowId(), workspaceId);
-    });
+    this.handle(
+      "remove-workspace",
+      (_, workspaceId: string) => {
+        return this.workspaceManager.removeWorkspace(windowId(), workspaceId);
+      },
+      { topic: topicForWorkspaceId },
+    );
 
-    this.handle("switch-workspace", (_, workspaceId: string) => {
-      return this.workspaceManager.switchWorkspace(windowId(), workspaceId);
-    });
+    this.handle(
+      "switch-workspace",
+      (_, workspaceId: string) => {
+        return this.workspaceManager.switchWorkspace(windowId(), workspaceId);
+      },
+      { topic: topicForWorkspaceId },
+    );
 
     this.handle(
       "move-tab-to-workspace",
@@ -257,6 +425,7 @@ export class EventManager {
           workspaceId,
         );
       },
+      { topic: tabWorkspaceTopic },
     );
 
     this.handle(
@@ -397,61 +566,72 @@ export class EventManager {
   }
 
   private handleSidebarEvents(): void {
-    this.handle("toggle-sidebar", () => {
-      this.mainWindow.sidebar.toggle();
-      this.mainWindow.updateAllBounds();
-      return true;
-    });
+    const activeWorkspaceTopic = (): string =>
+      this.getActiveWorkspaceTopicFromHistory();
+
+    this.handle(
+      "toggle-sidebar",
+      () => {
+        this.mainWindow.sidebar.toggle();
+        this.mainWindow.updateAllBounds();
+        return true;
+      },
+      { topic: activeWorkspaceTopic },
+    );
 
     this.handle(
       "sidebar-chat-message",
       async (_, request: { message: string; messageId: string }) => {
         await this.mainWindow.sidebar.client.sendChatMessage(request);
       },
+      { topic: activeWorkspaceTopic },
     );
 
-    this.handle("sidebar-clear-chat", () => {
-      this.mainWindow.sidebar.client.clearMessages();
-      return true;
-    });
+    this.handle(
+      "sidebar-clear-chat",
+      () => {
+        this.mainWindow.sidebar.client.clearMessages();
+        return true;
+      },
+      { topic: activeWorkspaceTopic },
+    );
 
-    this.handle("sidebar-get-messages", () => {
-      return this.mainWindow.sidebar.client.getMessages();
-    });
+    this.handle(
+      "sidebar-get-messages",
+      () => {
+        return this.mainWindow.sidebar.client.getMessages();
+      },
+      { topic: activeWorkspaceTopic },
+    );
   }
 
   private handlePageContentEvents(): void {
-    this.handle("get-page-content", async () => {
-      if (this.mainWindow.activeTab) {
-        try {
-          return await this.mainWindow.activeTab.getTabHtml();
-        } catch (error) {
-          console.error("Error getting page content:", error);
-          return null;
+    const activeTabWorkspaceTopic = (): string =>
+      this.getActiveTabWorkspaceTopic();
+
+    this.handle(
+      "get-page-text",
+      async () => {
+        if (this.mainWindow.activeTab) {
+          try {
+            return await this.mainWindow.activeTab.getTabText();
+          } catch (error) {
+            console.error("Error getting page text:", error);
+            return null;
+          }
         }
-      }
-      return null;
-    });
+        return null;
+      },
+      { topic: activeTabWorkspaceTopic },
+    );
 
-    this.handle("get-page-text", async () => {
-      if (this.mainWindow.activeTab) {
-        try {
-          return await this.mainWindow.activeTab.getTabText();
-        } catch (error) {
-          console.error("Error getting page text:", error);
-          return null;
-        }
-      }
-      return null;
-    });
-
-    this.handle("get-current-url", () => {
-      return this.mainWindow.activeTab?.url ?? null;
-    });
-  }
-
-  private handleDebugEvents(): void {
-    this.on("ping", () => console.log("pong"));
+    this.handle(
+      "get-current-url",
+      () => {
+        return this.mainWindow.activeTab?.url ?? null;
+      },
+      { topic: activeTabWorkspaceTopic },
+    );
   }
 
   public cleanup(): void {

@@ -111,8 +111,8 @@ export type WorkspacePayloadType =
   | "tab-activated"
   | "tab-moved";
 
-export function workspaceTopic(workspaceId: string): string {
-  return `${WORKSPACE_TOPIC_PREFIX}${workspaceId}`;
+export function workspaceTopic(workspaceName: string): string {
+  return `${WORKSPACE_TOPIC_PREFIX}${workspaceName}`;
 }
 
 export function parseWorkspaceTopic(topic: string): string | null {

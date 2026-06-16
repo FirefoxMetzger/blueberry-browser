@@ -125,12 +125,6 @@ export class Tab {
     return await this.webContentsView.webContents.executeJavaScript(code);
   }
 
-  async getTabHtml(): Promise<string> {
-    return (await this.runJs(
-      "return document.documentElement.outerHTML",
-    )) as string;
-  }
-
   async getTabText(): Promise<string> {
     return (await this.runJs(
       "return document.documentElement.innerText",
