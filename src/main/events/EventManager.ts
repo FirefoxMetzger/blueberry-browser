@@ -2,7 +2,6 @@ import {
   ipcMain,
   IpcMainEvent,
   IpcMainInvokeEvent,
-  WebContents,
 } from "electron";
 import type { Window } from "../Window";
 import { eventDatabase } from "./database";
@@ -34,9 +33,6 @@ export class EventManager {
     // Page content events
     this.handlePageContentEvents();
 
-    // Dark mode events
-    this.handleDarkModeEvents();
-
     // Debug events
     this.handleDebugEvents();
 
@@ -59,7 +55,7 @@ export class EventManager {
     });
   }
 
-  private on<T extends unknown[]>(
+  public on<T extends unknown[]>(
     channel: string,
     listener: (event: IpcMainEvent, ...args: T) => void,
   ): void {
@@ -305,49 +301,9 @@ export class EventManager {
     });
   }
 
-  private handleDarkModeEvents(): void {
-    // Dark mode broadcasting
-    this.on("dark-mode-changed", (event, isDarkMode) => {
-      this.broadcastDarkMode(event.sender, isDarkMode as boolean);
-    });
-  }
-
   private handleDebugEvents(): void {
     // Ping test
     this.on("ping", () => console.log("pong"));
-  }
-
-  private broadcastDarkMode(sender: WebContents, isDarkMode: boolean): void {
-    // Send to topbar
-    if (this.mainWindow.topBar.view.webContents !== sender) {
-      this.mainWindow.topBar.view.webContents.send(
-        "dark-mode-updated",
-        isDarkMode,
-      );
-    }
-
-    // Send to event panel
-    if (this.mainWindow.eventPanel.view.webContents !== sender) {
-      this.mainWindow.eventPanel.view.webContents.send(
-        "dark-mode-updated",
-        isDarkMode,
-      );
-    }
-
-    // Send to sidebar
-    if (this.mainWindow.sidebar.view.webContents !== sender) {
-      this.mainWindow.sidebar.view.webContents.send(
-        "dark-mode-updated",
-        isDarkMode,
-      );
-    }
-
-    // Send to all tabs
-    this.mainWindow.allTabs.forEach((tab) => {
-      if (tab.webContents !== sender) {
-        tab.webContents.send("dark-mode-updated", isDarkMode);
-      }
-    });
   }
 
   // Clean up event listeners

@@ -4,6 +4,7 @@ module.exports = {
   content: [
     "./src/renderer/**/*.{js,ts,jsx,tsx,html}",
     "./src/**/renderer/**/*.{js,ts,jsx,tsx,html}",
+    "./src/darkMode/**/*.{js,ts,jsx,tsx}",
   ],
   theme: {
     container: {

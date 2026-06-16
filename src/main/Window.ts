@@ -1,7 +1,7 @@
 import { BaseWindow, shell } from "electron";
 import { Tab } from "./Tab";
-import { TopBar } from "./TopBar";
-import { SideBar } from "./SideBar";
+import { TopBar } from "../topBar/mainTopBar";
+import { SideBar } from "../sideBar/mainSideBar";
 import { EventPanel, EVENT_PANEL_WIDTH } from "../eventPanel/mainEventPanel";
 
 export class Window {

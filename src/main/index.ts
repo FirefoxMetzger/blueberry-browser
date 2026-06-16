@@ -4,6 +4,7 @@ import { Window } from "./Window";
 import { AppMenu } from "./Menu";
 import { EventManager } from "./events/EventManager";
 import { eventDatabase } from "./events";
+import { DarkModeManager } from "../darkMode/mainDarkMode";
 
 let mainWindow: Window | null = null;
 let eventManager: EventManager | null = null;
@@ -12,6 +13,7 @@ let menu: AppMenu | null = null;
 const createWindow = (): Window => {
   const window = new Window();
   eventManager = new EventManager(window);
+  new DarkModeManager(window, eventManager);
   menu = new AppMenu(window, (channel, args) =>
     eventManager?.publishMenuAction(channel, args),
   );

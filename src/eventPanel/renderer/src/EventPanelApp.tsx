@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { useDarkMode } from '@common/hooks/useDarkMode'
+import { useDarkMode } from '@darkMode/useDarkMode'
 
 interface EventLogEntry {
     id: number
@@ -63,17 +63,9 @@ const EventRow: React.FC<{ event: EventLogEntry }> = ({ event }) => {
 }
 
 export const EventPanelApp: React.FC = () => {
-    const { isDarkMode } = useDarkMode()
+    useDarkMode()
     const [events, setEvents] = useState<EventLogEntry[]>([])
     const [error, setError] = useState<string | null>(null)
-
-    useEffect(() => {
-        if (isDarkMode) {
-            document.documentElement.classList.add('dark')
-        } else {
-            document.documentElement.classList.remove('dark')
-        }
-    }, [isDarkMode])
 
     useEffect(() => {
         let isMounted = true

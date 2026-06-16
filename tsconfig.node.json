@@ -3,9 +3,8 @@
   "include": [
     "electron.vite.config.*",
     "src/main/**/*",
-    "src/preload/**/*",
-    "src/eventPanel/mainEventPanel.ts",
-    "src/eventPanel/preloadEventPanel.ts"
+    "src/*/main*.ts",
+    "src/*/preload*.ts"
   ],
   "compilerOptions": {
     "composite": true,

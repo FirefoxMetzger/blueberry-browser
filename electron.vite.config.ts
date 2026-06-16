@@ -11,8 +11,8 @@ export default defineConfig({
     build: {
       rollupOptions: {
         input: {
-          topbar: resolve(__dirname, "src/preload/topbar.ts"),
-          sidebar: resolve(__dirname, "src/preload/sidebar.ts"),
+          preloadTopBar: resolve(__dirname, "src/topBar/preloadTopBar.ts"),
+          preloadSideBar: resolve(__dirname, "src/sideBar/preloadSideBar.ts"),
           preloadEventPanel: resolve(
             __dirname,
             "src/eventPanel/preloadEventPanel.ts",
@@ -26,8 +26,8 @@ export default defineConfig({
     build: {
       rollupOptions: {
         input: {
-          topbar: resolve(__dirname, "src/renderer/topbar/index.html"),
-          sidebar: resolve(__dirname, "src/renderer/sidebar/index.html"),
+          topbar: resolve(__dirname, "src/topBar/renderer/index.html"),
+          sidebar: resolve(__dirname, "src/sideBar/renderer/index.html"),
           eventpanel: resolve(__dirname, "src/eventPanel/renderer/index.html"),
         },
       },
@@ -36,6 +36,7 @@ export default defineConfig({
       alias: {
         "@renderer": resolve("src/renderer/src"),
         "@common": resolve("src/renderer/common"),
+        "@darkMode": resolve("src/darkMode"),
       },
     },
     plugins: [react()],
