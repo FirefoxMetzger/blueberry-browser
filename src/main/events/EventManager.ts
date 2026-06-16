@@ -7,6 +7,8 @@ import type { Window } from "../Window";
 import { eventDatabase } from "./database";
 import type { Event } from "./types";
 
+const DEFAULT_EVENT_TOPIC = "default";
+
 type EventMetadata =
   | { sender: number; kind: "invoke" | "on" }
   | { kind: "menu"; source: "application-menu" };
@@ -74,10 +76,10 @@ export class EventManager {
     metadata: EventMetadata,
   ): void {
     const event = eventDatabase.publish(
-      channel,
+      DEFAULT_EVENT_TOPIC,
       1,
       args,
-      "rpc-args",
+      channel,
       metadata,
       "rpc-meta",
     );

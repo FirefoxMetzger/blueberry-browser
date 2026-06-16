@@ -4,7 +4,9 @@ export const DARK_MODE_UPDATED_TOPIC = "dark-mode-updated";
 export const LATEST_DARK_MODE_EVENT_QUERY = `
   SELECT payload
   FROM events
-  WHERE topic = ?
+  WHERE
+    (topic = 'default' AND payload_type = ?1)
+    OR (topic = ?1 AND payload_type = 'rpc-args')
   ORDER BY id DESC
   LIMIT 1
 `;

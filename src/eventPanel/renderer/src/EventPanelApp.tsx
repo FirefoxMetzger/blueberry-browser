@@ -10,7 +10,18 @@ interface EventLogEntry {
 }
 
 const EVENT_QUERY = `
-  SELECT id, created, topic, payload_type, metadata_type
+  SELECT
+    id,
+    created,
+    CASE
+      WHEN topic != 'default' AND payload_type = 'rpc-args' THEN 'default'
+      ELSE topic
+    END AS topic,
+    CASE
+      WHEN topic != 'default' AND payload_type = 'rpc-args' THEN topic
+      ELSE payload_type
+    END AS payload_type,
+    metadata_type
   FROM events
   ORDER BY id DESC
   LIMIT 30
@@ -38,18 +49,18 @@ const EventRow: React.FC<{ event: EventLogEntry }> = ({ event }) => {
         <li className="relative border-b border-border/70 px-3 py-2.5 last:border-b-0">
             <div className="mb-1.5 flex min-w-0 items-baseline gap-2">
                 <span className="min-w-0 flex-1 truncate text-xs font-semibold text-foreground">
-                    {event.topic}
+                    {formatType(event.payload_type)}
                 </span>
                 <span className="shrink-0 text-[10px] leading-none text-muted-foreground">
                     {formatCreated(event.created)}
                 </span>
             </div>
-            <div className="grid grid-cols-1 gap-1 text-[11px] leading-tight text-muted-foreground">
+            <div className="flex min-w-0 flex-wrap gap-x-3 gap-y-1 text-[11px] leading-tight text-muted-foreground">
                 <div className="flex min-w-0 items-center gap-1.5">
                     <span className="rounded bg-muted px-1.5 py-0.5 font-medium text-foreground/75">
-                        payload
+                        topic
                     </span>
-                    <span className="truncate">{formatType(event.payload_type)}</span>
+                    <span className="truncate">{event.topic}</span>
                 </div>
                 <div className="flex min-w-0 items-center gap-1.5">
                     <span className="rounded bg-muted px-1.5 py-0.5 font-medium text-foreground/75">
