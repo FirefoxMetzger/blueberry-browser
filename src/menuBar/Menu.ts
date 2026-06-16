@@ -1,5 +1,5 @@
 import { Menu, app } from "electron";
-import type { Window } from "./Window";
+import type { Window } from "../main/Window";
 
 export type MenuEventPublisher = (channel: string, args?: unknown[]) => void;
 

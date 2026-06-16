@@ -27,6 +27,7 @@ export const useDarkMode = () => {
     window.electron.ipcRenderer
       .invoke("db-query", LATEST_DARK_MODE_EVENT_QUERY, [
         DARK_MODE_CHANGED_TOPIC,
+        DARK_MODE_CHANGED_TOPIC,
       ])
       .then((rows: DarkModeEventRow[]) => {
         if (!isMounted || rows.length === 0) {
