@@ -5,18 +5,22 @@ import { AppMenu } from "../menuBar/Menu";
 import { EventManager } from "./events/EventManager";
 import { eventDatabase } from "./events";
 import { DarkModeManager } from "../darkMode/mainDarkMode";
+import { WorkspaceManager } from "./workspaces";
 
 let mainWindow: Window | null = null;
 let eventManager: EventManager | null = null;
+let workspaceManager: WorkspaceManager | null = null;
 let menu: AppMenu | null = null;
 
 const createWindow = (): Window => {
   const window = new Window();
-  eventManager = new EventManager(window);
-  menu = new AppMenu(window, (channel, args) =>
+  workspaceManager!.registerWindow(window);
+  eventManager = new EventManager(window, workspaceManager!);
+  menu = new AppMenu(window, workspaceManager!, (channel, args) =>
     eventManager?.publishMenuAction(channel, args),
   );
   new DarkModeManager(window, eventManager);
+  eventManager.broadcastWorkspaceState(window);
   return window;
 };
 
@@ -25,11 +29,13 @@ app.whenReady().then(() => {
 
   eventDatabase.init();
 
+  workspaceManager = new WorkspaceManager((event) => {
+    eventManager?.broadcastEvent(event);
+  });
+
   mainWindow = createWindow();
 
   app.on("activate", () => {
-    // On macOS it's common to re-create a window in the app when the
-    // dock icon is clicked and there are no other windows open.
     if (BrowserWindow.getAllWindows().length === 0) {
       mainWindow = createWindow();
     }
@@ -46,10 +52,11 @@ app.on("window-all-closed", () => {
     eventManager = null;
   }
 
-  // Clean up references
   if (mainWindow) {
+    workspaceManager?.unregisterWindow(mainWindow.id);
     mainWindow = null;
   }
+
   if (menu) {
     menu = null;
   }

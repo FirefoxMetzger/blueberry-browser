@@ -1,4 +1,5 @@
 import { NativeImage, WebContentsView } from "electron";
+import type { TabStateCallback } from "./Window";
 
 export class Tab {
   private webContentsView: WebContentsView;
@@ -6,19 +7,19 @@ export class Tab {
   private _title: string;
   private _url: string;
   private _isVisible: boolean = false;
-  private onStateChanged: (() => void) | undefined;
+  private onStateChanged: TabStateCallback | undefined;
 
   constructor(
     id: string,
     url: string = "https://www.google.com",
-    onStateChanged?: () => void
+    onStateChanged?: TabStateCallback,
+    title: string = "New Tab",
   ) {
     this._id = id;
     this._url = url;
-    this._title = "New Tab";
+    this._title = title;
     this.onStateChanged = onStateChanged;
 
-    // Create the WebContentsView for web content only
     this.webContentsView = new WebContentsView({
       webPreferences: {
         nodeIntegration: false,
@@ -28,21 +29,16 @@ export class Tab {
       },
     });
 
-    // Set up event listeners
     this.setupEventListeners();
-
-    // Load the initial URL
     this.loadURL(url);
   }
 
   private setupEventListeners(): void {
-    // Update title when page title changes
     this.webContentsView.webContents.on("page-title-updated", (_, title) => {
       this._title = title;
       this.notifyStateChanged();
     });
 
-    // Update URL when navigation occurs
     this.webContentsView.webContents.on("did-navigate", (_, url) => {
       this._url = url;
       this.notifyStateChanged();
@@ -55,10 +51,9 @@ export class Tab {
   }
 
   private notifyStateChanged(): void {
-    this.onStateChanged?.();
+    this.onStateChanged?.(this._id, this._title, this._url);
   }
 
-  // Getters
   get id(): string {
     return this._id;
   }
@@ -75,7 +70,7 @@ export class Tab {
     return this._isVisible;
   }
 
-  get webContents() {
+  get webContents(): Electron.WebContents {
     return this.webContentsView.webContents;
   }
 
@@ -83,7 +78,6 @@ export class Tab {
     return this.webContentsView;
   }
 
-  // Public methods
   show(): void {
     this._isVisible = true;
     this.webContentsView.setVisible(true);
@@ -98,16 +92,20 @@ export class Tab {
     return await this.webContentsView.webContents.capturePage();
   }
 
-  async runJs(code: string): Promise<any> {
+  async runJs(code: string): Promise<unknown> {
     return await this.webContentsView.webContents.executeJavaScript(code);
   }
 
   async getTabHtml(): Promise<string> {
-    return await this.runJs("return document.documentElement.outerHTML");
+    return (await this.runJs(
+      "return document.documentElement.outerHTML",
+    )) as string;
   }
 
   async getTabText(): Promise<string> {
-    return await this.runJs("return document.documentElement.innerText");
+    return (await this.runJs(
+      "return document.documentElement.innerText",
+    )) as string;
   }
 
   loadURL(url: string): Promise<void> {

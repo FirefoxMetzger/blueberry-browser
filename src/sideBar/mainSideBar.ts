@@ -2,6 +2,7 @@ import { is } from "@electron-toolkit/utils";
 import { BaseWindow, WebContentsView } from "electron";
 import { join } from "path";
 import { LLMClient } from "../main/LLMClient";
+import { TOPBAR_BASE_HEIGHT } from "../main/layout";
 
 export class SideBar {
   private webContentsView: WebContentsView;
@@ -46,21 +47,21 @@ export class SideBar {
     return webContentsView;
   }
 
-  private setupBounds(): void {
+  private setupBounds(contentTop = TOPBAR_BASE_HEIGHT): void {
     if (!this.isVisible) return;
 
     const bounds = this.baseWindow.getBounds();
     this.webContentsView.setBounds({
-      x: bounds.width - 400, // 400px width sidebar on the right
-      y: 88, // Start below the topbar
+      x: bounds.width - 400,
+      y: contentTop,
       width: 400,
-      height: bounds.height - 88, // Subtract topbar height
+      height: bounds.height - contentTop,
     });
   }
 
-  updateBounds(): void {
+  updateBounds(contentTop = TOPBAR_BASE_HEIGHT): void {
     if (this.isVisible) {
-      this.setupBounds();
+      this.setupBounds(contentTop);
     } else {
       // Hide the sidebar
       this.webContentsView.setBounds({

@@ -1,6 +1,7 @@
 import { is } from "@electron-toolkit/utils";
 import { BaseWindow, WebContentsView } from "electron";
 import { join } from "path";
+import { TOPBAR_BASE_HEIGHT } from "../main/layout";
 
 export const EVENT_PANEL_WIDTH = 280;
 
@@ -40,18 +41,18 @@ export class EventPanel {
     return webContentsView;
   }
 
-  private setupBounds(): void {
+  private setupBounds(contentTop = TOPBAR_BASE_HEIGHT): void {
     const bounds = this.baseWindow.getBounds();
     this.webContentsView.setBounds({
       x: 0,
-      y: 88,
+      y: contentTop,
       width: EVENT_PANEL_WIDTH,
-      height: bounds.height - 88,
+      height: bounds.height - contentTop,
     });
   }
 
-  updateBounds(): void {
-    this.setupBounds();
+  updateBounds(contentTop = TOPBAR_BASE_HEIGHT): void {
+    this.setupBounds(contentTop);
   }
 
   get view(): WebContentsView {

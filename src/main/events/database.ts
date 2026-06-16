@@ -13,7 +13,7 @@ const CREATE_TABLE_SQL = `
     payload_type  VARCHAR(200),
     metadata      VARCHAR,
     metadata_type VARCHAR(200),
-    created       DATE DEFAULT CURRENT_DATE
+    created       TEXT DEFAULT CURRENT_TIMESTAMP
   );
 `;
 
@@ -59,38 +59,87 @@ class EventDatabase {
     payload: P,
     payloadType: string,
     metadata: M,
-    metadataType: string
+    metadataType: string,
   ): Event<P, M> {
-    const db = this.requireDb();
+    const [event] = this.publishMany([
+      {
+        topic,
+        version,
+        payload,
+        payloadType,
+        metadata,
+        metadataType,
+      },
+    ]);
+    return event;
+  }
 
-    const payloadJson = JSON.stringify(payload);
-    const metadataJson = JSON.stringify(metadata);
+  publishMany<P, M>(
+    entries: {
+      topic: string;
+      version: number;
+      payload: P;
+      payloadType: string;
+      metadata: M;
+      metadataType: string;
+    }[],
+  ): Event<P, M>[] {
+    const db = this.requireDb();
+    const created = new Date().toISOString();
 
     const insert = db.prepare(`
-      INSERT INTO events (topic, version, payload, payload_type, metadata, metadata_type)
-      VALUES (?, ?, ?, ?, ?, ?)
+      INSERT INTO events (topic, version, payload, payload_type, metadata, metadata_type, created)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
       RETURNING *
     `);
 
-    const row = insert.get(
-      topic,
-      version,
-      payloadJson,
-      payloadType,
-      metadataJson,
-      metadataType
-    ) as EventRow;
+    const insertMany = db.transaction(
+      (
+        rows: {
+          topic: string;
+          version: number;
+          payloadJson: string;
+          payloadType: string;
+          metadataJson: string;
+          metadataType: string;
+        }[],
+      ) => {
+        return rows.map(
+          (row) =>
+            insert.get(
+              row.topic,
+              row.version,
+              row.payloadJson,
+              row.payloadType,
+              row.metadataJson,
+              row.metadataType,
+              created,
+            ) as EventRow,
+        );
+      },
+    );
 
-    return {
+    const insertedRows = insertMany(
+      entries.map((entry) => ({
+        topic: entry.topic,
+        version: entry.version,
+        payloadJson: JSON.stringify(entry.payload),
+        payloadType: entry.payloadType,
+        metadataJson: JSON.stringify(entry.metadata),
+        metadataType: entry.metadataType,
+      })),
+    );
+
+    return insertedRows.map((row, index) => ({
       id: row.id,
       topic: row.topic,
       version: row.version,
-      payload,
+      payload: entries[index].payload,
       payload_type: row.payload_type,
-      metadata,
+      metadata: entries[index].metadata,
       metadata_type: row.metadata_type,
       created: row.created,
-    };
+    }));
   }
 
   query<T = unknown>(sql: string, params: unknown[] = []): T[] {

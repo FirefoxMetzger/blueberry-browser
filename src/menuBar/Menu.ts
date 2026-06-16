@@ -1,14 +1,21 @@
 import { Menu, app } from "electron";
 import type { Window } from "../main/Window";
+import type { WorkspaceManager } from "../main/workspaces/WorkspaceManager";
 
 export type MenuEventPublisher = (channel: string, args?: unknown[]) => void;
 
 export class AppMenu {
   private mainWindow: Window;
+  private workspaceManager: WorkspaceManager;
   private publishEvent: MenuEventPublisher;
 
-  constructor(mainWindow: Window, publishEvent: MenuEventPublisher) {
+  constructor(
+    mainWindow: Window,
+    workspaceManager: WorkspaceManager,
+    publishEvent: MenuEventPublisher,
+  ) {
     this.mainWindow = mainWindow;
+    this.workspaceManager = workspaceManager;
     this.publishEvent = publishEvent;
     this.createMenu();
   }
@@ -112,7 +119,7 @@ export class AppMenu {
     const url = "https://www.google.com";
 
     this.publishEvent("create-tab", [url]);
-    this.mainWindow.createTab(url);
+    this.workspaceManager.createTab(this.mainWindow.id, url);
   }
 
   private handleCloseTab(): void {
@@ -120,7 +127,7 @@ export class AppMenu {
 
     if (activeTab) {
       this.publishEvent("close-tab", [activeTab.id]);
-      this.mainWindow.closeTab(activeTab.id);
+      this.workspaceManager.closeTab(this.mainWindow.id, activeTab.id);
     }
   }
 

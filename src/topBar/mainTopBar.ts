@@ -1,6 +1,9 @@
 import { is } from "@electron-toolkit/utils";
 import { BaseWindow, WebContentsView } from "electron";
 import { join } from "path";
+import { TOPBAR_BASE_HEIGHT } from "../main/layout";
+
+export { TOPBAR_BASE_HEIGHT };
 
 export class TopBar {
   private webContentsView: WebContentsView;
@@ -19,13 +22,11 @@ export class TopBar {
         preload: join(__dirname, "../preload/preloadTopBar.js"),
         nodeIntegration: false,
         contextIsolation: true,
-        sandbox: false, // Need to disable sandbox for preload to work
+        sandbox: false,
       },
     });
 
-    // Load the TopBar React app
     if (is.dev && process.env["ELECTRON_RENDERER_URL"]) {
-      // In development, load through Vite dev server
       const topbarUrl = new URL(
         "/topBar/renderer/",
         process.env["ELECTRON_RENDERER_URL"],
@@ -40,13 +41,17 @@ export class TopBar {
     return webContentsView;
   }
 
+  getHeight(): number {
+    return TOPBAR_BASE_HEIGHT;
+  }
+
   private setupBounds(): void {
     const bounds = this.baseWindow.getBounds();
     this.webContentsView.setBounds({
       x: 0,
       y: 0,
       width: bounds.width,
-      height: 88, // Fixed height for topbar (40px tabs + 48px address bar)
+      height: this.getHeight(),
     });
   }
 

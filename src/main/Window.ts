@@ -1,21 +1,30 @@
+import { randomUUID } from "crypto";
 import { BaseWindow, shell } from "electron";
 import { Tab } from "./Tab";
 import { TopBar } from "../topBar/mainTopBar";
 import { SideBar } from "../sideBar/mainSideBar";
 import { EventPanel, EVENT_PANEL_WIDTH } from "../eventPanel/mainEventPanel";
 
+export type TabStateCallback = (
+  tabId: string,
+  title: string,
+  url: string,
+) => void;
+
 export class Window {
+  readonly id: string;
   private _baseWindow: BaseWindow;
   private tabsMap: Map<string, Tab> = new Map();
   private activeTabId: string | null = null;
-  private tabCounter: number = 0;
   private _topBar: TopBar;
   private _sideBar: SideBar;
   private _eventPanel: EventPanel;
   private tabsChangedListeners = new Set<() => void>();
+  private tabStateCallbacks = new Map<string, TabStateCallback>();
 
   constructor() {
-    // Create the browser window.
+    this.id = randomUUID();
+
     this._baseWindow = new BaseWindow({
       width: 1000,
       height: 800,
@@ -32,19 +41,10 @@ export class Window {
     this._eventPanel = new EventPanel(this._baseWindow);
     this._sideBar = new SideBar(this._baseWindow);
 
-    // Set the window reference on the LLM client to avoid circular dependency
     this._sideBar.client.setWindow(this);
 
-    // Create the first tab
-    this.createTab();
-
-    // Set up window resize handler
     this._baseWindow.on("resize", () => {
-      this.updateTabBounds();
-      this._topBar.updateBounds();
-      this._eventPanel.updateBounds();
-      this._sideBar.updateBounds();
-      // Notify renderer of resize through active tab
+      this.updateAllBounds();
       const bounds = this._baseWindow.getBounds();
       if (this.activeTab) {
         this.activeTab.webContents.send("window-resized", {
@@ -54,26 +54,17 @@ export class Window {
       }
     });
 
-    // Handle external link opening
-    this.tabsMap.forEach((tab) => {
-      tab.webContents.setWindowOpenHandler((details) => {
-        shell.openExternal(details.url);
-        return { action: "deny" };
-      });
-    });
-
     this.setupEventListeners();
   }
 
   private setupEventListeners(): void {
     this._baseWindow.on("closed", () => {
-      // Clean up all tabs when window is closed
       this.tabsMap.forEach((tab) => tab.destroy());
       this.tabsMap.clear();
+      this.tabStateCallbacks.clear();
     });
   }
 
-  // Getters
   get window(): BaseWindow {
     return this._baseWindow;
   }
@@ -93,71 +84,108 @@ export class Window {
     return this.tabsMap.size;
   }
 
-  // Tab management methods
-  createTab(url?: string): Tab {
-    const tabId = `tab-${++this.tabCounter}`;
-    const tab = new Tab(tabId, url, () => this.notifyTabsChanged());
+  getMaterializedTabIds(): string[] {
+    return Array.from(this.tabsMap.keys());
+  }
 
-    // Add the tab's WebContentsView to the window
-    this._baseWindow.contentView.addChildView(tab.view);
+  getTabRecordUrl(tabId: string): string | undefined {
+    return this.tabsMap.get(tabId)?.url;
+  }
 
-    // Set the bounds to fill the window below the topbar, between the side panels.
-    const bounds = this._baseWindow.getBounds();
-    tab.view.setBounds({
-      x: EVENT_PANEL_WIDTH,
-      y: 88, // Start below the topbar
-      width: bounds.width - EVENT_PANEL_WIDTH - 400, // Subtract panel widths
-      height: bounds.height - 88, // Subtract topbar height
+  materializeTab(
+    tabId: string,
+    url: string,
+    onStateChanged?: TabStateCallback,
+    title?: string,
+  ): Tab {
+    const existing = this.tabsMap.get(tabId);
+    if (existing) {
+      return existing;
+    }
+
+    const callback: TabStateCallback = (id, title, changedUrl) => {
+      onStateChanged?.(id, title, changedUrl);
+    };
+
+    const tab = new Tab(tabId, url, callback, title);
+
+    tab.webContents.setWindowOpenHandler((details) => {
+      shell.openExternal(details.url);
+      return { action: "deny" };
     });
 
-    // Store the tab
-    this.tabsMap.set(tabId, tab);
+    this._baseWindow.contentView.addChildView(tab.view);
+    this.setTabBounds(tab);
+    tab.hide();
 
-    // If this is the first tab, make it active
-    if (this.tabsMap.size === 1) {
-      this.switchActiveTab(tabId);
-    } else {
-      // Hide the tab initially if it's not the first one
-      tab.hide();
+    this.tabsMap.set(tabId, tab);
+    if (onStateChanged) {
+      this.tabStateCallbacks.set(tabId, onStateChanged);
     }
 
     this.notifyTabsChanged();
-
     return tab;
   }
 
-  closeTab(tabId: string): boolean {
+  destroyTabView(tabId: string): boolean {
     const tab = this.tabsMap.get(tabId);
     if (!tab) {
       return false;
     }
 
-    // Remove the WebContentsView from the window
     this._baseWindow.contentView.removeChildView(tab.view);
-
-    // Destroy the tab
     tab.destroy();
-
-    // Remove from our tabs map
     this.tabsMap.delete(tabId);
+    this.tabStateCallbacks.delete(tabId);
 
-    // If this was the active tab, switch to another tab
     if (this.activeTabId === tabId) {
       this.activeTabId = null;
-      const remainingTabs = Array.from(this.tabsMap.keys());
-      if (remainingTabs.length > 0) {
-        this.switchActiveTab(remainingTabs[0]);
-      }
-    }
-
-    // If no tabs left, close the window
-    if (this.tabsMap.size === 0) {
-      this._baseWindow.close();
     }
 
     this.notifyTabsChanged();
-
     return true;
+  }
+
+  hideTab(tabId: string): boolean {
+    const tab = this.tabsMap.get(tabId);
+    if (!tab) {
+      return false;
+    }
+
+    tab.hide();
+    if (this.activeTabId === tabId) {
+      this.activeTabId = null;
+    }
+
+    this.notifyTabsChanged();
+    return true;
+  }
+
+  syncVisibleTabs(
+    visibleTabIds: string[],
+    materialize: (tabId: string, url: string) => void,
+    getUrl: (tabId: string) => string | undefined,
+  ): void {
+    const visibleSet = new Set(visibleTabIds);
+
+    for (const tabId of Array.from(this.tabsMap.keys())) {
+      if (!visibleSet.has(tabId)) {
+        const tab = this.tabsMap.get(tabId);
+        if (tab) {
+          tab.hide();
+        }
+      }
+    }
+
+    for (const tabId of visibleTabIds) {
+      if (!this.tabsMap.has(tabId)) {
+        materialize(tabId, getUrl(tabId) ?? "https://www.google.com");
+      }
+    }
+  }
+
+  closeTab(tabId: string): boolean {
+    return this.destroyTabView(tabId);
   }
 
   switchActiveTab(tabId: string): boolean {
@@ -166,24 +194,25 @@ export class Window {
       return false;
     }
 
-    // Hide the currently active tab
     if (this.activeTabId && this.activeTabId !== tabId) {
       const currentTab = this.tabsMap.get(this.activeTabId);
-      if (currentTab) {
-        currentTab.hide();
-      }
+      currentTab?.hide();
     }
 
-    // Show the new active tab
     tab.show();
     this.activeTabId = tabId;
-
-    // Update the window title to match the tab title
     this._baseWindow.setTitle(tab.title || "Blueberry Browser");
-
     this.notifyTabsChanged();
-
     return true;
+  }
+
+  clearActiveTab(): void {
+    if (this.activeTabId) {
+      const currentTab = this.tabsMap.get(this.activeTabId);
+      currentTab?.hide();
+      this.activeTabId = null;
+      this.notifyTabsChanged();
+    }
   }
 
   onTabsChanged(listener: () => void): () => void {
@@ -201,7 +230,6 @@ export class Window {
     return this.tabsMap.get(tabId) || null;
   }
 
-  // Window methods
   show(): void {
     this._baseWindow.show();
   }
@@ -251,30 +279,34 @@ export class Window {
     return this._baseWindow.getBounds();
   }
 
-  // Handle window resize to update tab bounds
-  private updateTabBounds(): void {
+  private setTabBounds(tab: Tab): void {
     const bounds = this._baseWindow.getBounds();
-    // Only subtract sidebar width if it's visible
     const sidebarWidth = this._sideBar.getIsVisible() ? 400 : 0;
-
-    this.tabsMap.forEach((tab) => {
-      tab.view.setBounds({
-        x: EVENT_PANEL_WIDTH,
-        y: 88, // Start below the topbar
-        width: bounds.width - EVENT_PANEL_WIDTH - sidebarWidth,
-        height: bounds.height - 88, // Subtract topbar height
-      });
+    const contentTop = this.getContentTop();
+    tab.view.setBounds({
+      x: EVENT_PANEL_WIDTH,
+      y: contentTop,
+      width: bounds.width - EVENT_PANEL_WIDTH - sidebarWidth,
+      height: bounds.height - contentTop,
     });
   }
 
-  // Public method to update all bounds when sidebar is toggled
-  updateAllBounds(): void {
-    this.updateTabBounds();
-    this._eventPanel.updateBounds();
-    this._sideBar.updateBounds();
+  private updateTabBounds(): void {
+    this.tabsMap.forEach((tab) => this.setTabBounds(tab));
   }
 
-  // Getter for sidebar to access from main process
+  updateAllBounds(): void {
+    const contentTop = this.getContentTop();
+    this._topBar.updateBounds();
+    this.updateTabBounds();
+    this._eventPanel.updateBounds(contentTop);
+    this._sideBar.updateBounds(contentTop);
+  }
+
+  getContentTop(): number {
+    return this._topBar.getHeight();
+  }
+
   get sidebar(): SideBar {
     return this._sideBar;
   }
@@ -283,17 +315,14 @@ export class Window {
     return this._eventPanel;
   }
 
-  // Getter for topBar to access from main process
   get topBar(): TopBar {
     return this._topBar;
   }
 
-  // Getter for all tabs as array
   get tabs(): Tab[] {
     return Array.from(this.tabsMap.values());
   }
 
-  // Getter for baseWindow to access from Menu
   get baseWindow(): BaseWindow {
     return this._baseWindow;
   }
