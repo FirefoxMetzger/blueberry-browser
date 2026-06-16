@@ -8,6 +8,10 @@ import type { Window } from "./Window";
 import { eventDatabase } from "./events";
 import type { Event } from "./events";
 
+type EventMetadata =
+  | { sender: number; kind: "invoke" | "on" }
+  | { kind: "menu"; source: "application-menu" };
+
 export class EventManager {
   private mainWindow: Window;
 
@@ -67,7 +71,7 @@ export class EventManager {
   private logAndBroadcast(
     channel: string,
     args: unknown[],
-    metadata: { sender: number; kind: "invoke" | "on" }
+    metadata: EventMetadata
   ): void {
     const event = eventDatabase.publish(
       channel,
@@ -78,6 +82,13 @@ export class EventManager {
       "rpc-meta"
     );
     this.broadcastEvent(event);
+  }
+
+  public publishMenuAction(channel: string, args: unknown[] = []): void {
+    this.logAndBroadcast(channel, args, {
+      kind: "menu",
+      source: "application-menu",
+    });
   }
 
   private broadcastEvent(event: Event): void {

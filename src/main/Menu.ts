@@ -1,11 +1,15 @@
 import { Menu, app } from "electron";
 import type { Window } from "./Window";
 
+export type MenuEventPublisher = (channel: string, args?: unknown[]) => void;
+
 export class AppMenu {
   private mainWindow: Window;
+  private publishEvent: MenuEventPublisher;
 
-  constructor(mainWindow: Window) {
+  constructor(mainWindow: Window, publishEvent: MenuEventPublisher) {
     this.mainWindow = mainWindow;
+    this.publishEvent = publishEvent;
     this.createMenu();
   }
 
@@ -28,7 +32,7 @@ export class AppMenu {
           {
             label: "Quit",
             accelerator: process.platform === "darwin" ? "Cmd+Q" : "Ctrl+Q",
-            click: () => app.quit(),
+            click: () => this.handleQuit(),
           },
         ],
       },
@@ -105,52 +109,81 @@ export class AppMenu {
 
   // Menu action handlers
   private handleNewTab(): void {
-    this.mainWindow.createTab("https://www.google.com");
+    const url = "https://www.google.com";
+
+    this.publishEvent("create-tab", [url]);
+    this.mainWindow.createTab(url);
   }
 
   private handleCloseTab(): void {
-    if (this.mainWindow.activeTab) {
-      this.mainWindow.closeTab(this.mainWindow.activeTab.id);
+    const activeTab = this.mainWindow.activeTab;
+
+    if (activeTab) {
+      this.publishEvent("close-tab", [activeTab.id]);
+      this.mainWindow.closeTab(activeTab.id);
     }
   }
 
+  private handleQuit(): void {
+    this.publishEvent("quit");
+    app.quit();
+  }
+
   private handleReload(): void {
-    if (this.mainWindow.activeTab) {
-      this.mainWindow.activeTab.reload();
+    const activeTab = this.mainWindow.activeTab;
+
+    if (activeTab) {
+      this.publishEvent("reload", [activeTab.id]);
+      activeTab.reload();
     }
   }
 
   private handleForceReload(): void {
-    if (this.mainWindow.activeTab) {
-      this.mainWindow.activeTab.webContents.reloadIgnoringCache();
+    const activeTab = this.mainWindow.activeTab;
+
+    if (activeTab) {
+      this.publishEvent("force-reload", [activeTab.id]);
+      activeTab.webContents.reloadIgnoringCache();
     }
   }
 
   private handleToggleSidebar(): void {
+    this.publishEvent("toggle-sidebar");
     this.mainWindow.sidebar.toggle();
     this.mainWindow.updateAllBounds();
   }
 
   private handleToggleDevTools(): void {
-    if (this.mainWindow.activeTab) {
-      this.mainWindow.activeTab.webContents.toggleDevTools();
+    const activeTab = this.mainWindow.activeTab;
+
+    if (activeTab) {
+      this.publishEvent("toggle-dev-tools", [activeTab.id]);
+      activeTab.webContents.toggleDevTools();
     }
   }
 
   private handleToggleFullscreen(): void {
     const isFullScreen = this.mainWindow.baseWindow.isFullScreen();
+
+    this.publishEvent("toggle-fullscreen", [!isFullScreen]);
     this.mainWindow.baseWindow.setFullScreen(!isFullScreen);
   }
 
   private handleGoBack(): void {
-    if (this.mainWindow.activeTab) {
-      this.mainWindow.activeTab.goBack();
+    const activeTab = this.mainWindow.activeTab;
+
+    if (activeTab) {
+      this.publishEvent("go-back", [activeTab.id]);
+      activeTab.goBack();
     }
   }
 
   private handleGoForward(): void {
-    if (this.mainWindow.activeTab) {
-      this.mainWindow.activeTab.goForward();
+    const activeTab = this.mainWindow.activeTab;
+
+    if (activeTab) {
+      this.publishEvent("go-forward", [activeTab.id]);
+      activeTab.goForward();
     }
   }
 }
