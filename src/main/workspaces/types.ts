@@ -15,6 +15,12 @@ export interface WorkspaceTabRecord {
   title: string;
   url: string;
   workspaceId: string;
+  history?: TabHistorySnapshot;
+}
+
+export interface TabHistorySnapshot {
+  entries: Electron.NavigationEntry[];
+  index: number;
 }
 
 export interface WorkspaceState {

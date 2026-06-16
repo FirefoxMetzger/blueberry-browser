@@ -2,6 +2,7 @@ import type { Event } from "../events/types";
 import { eventDatabase } from "../events/database";
 import type { Window } from "../Window";
 import { applyEventRow, replayProjection } from "./WorkspaceProjection";
+import { TabHistoryAggregator } from "./WorkspaceHistory";
 import {
   createMoveId,
   createTabId,
@@ -37,6 +38,7 @@ type StateListener = () => void;
 
 export class WorkspaceManager {
   private projection: GlobalWorkspaceProjection;
+  private historyAggregator: TabHistoryAggregator;
   private windows = new Map<string, Window>();
   private windowWorkspaceSelection = new Map<string, string>();
   private stateListeners = new Set<StateListener>();
@@ -44,10 +46,15 @@ export class WorkspaceManager {
 
   constructor(broadcastEvent: (event: Event) => void) {
     this.broadcastEvent = broadcastEvent;
-    this.projection = this.loadProjectionFromHistory();
+    const restored = this.loadProjectionFromHistory();
+    this.projection = restored.projection;
+    this.historyAggregator = restored.historyAggregator;
   }
 
-  private loadProjectionFromHistory(): GlobalWorkspaceProjection {
+  private loadProjectionFromHistory(): {
+    projection: GlobalWorkspaceProjection;
+    historyAggregator: TabHistoryAggregator;
+  } {
     const rows = eventDatabase.query<StoredEventRow>(WORKSPACE_EVENTS_QUERY);
     const parsedRows = rows.map((row) => ({
       topic: row.topic,
@@ -55,7 +62,11 @@ export class WorkspaceManager {
       payload: JSON.parse(row.payload) as unknown,
     }));
 
-    return replayProjection(parsedRows);
+    const projection = replayProjection(parsedRows);
+    const historyAggregator = new TabHistoryAggregator(parsedRows);
+    historyAggregator.hydrateProjection(projection);
+
+    return { projection, historyAggregator };
   }
 
   onStateChanged(listener: StateListener): () => void {
@@ -83,6 +94,8 @@ export class WorkspaceManager {
       DOMAIN_METADATA_TYPE,
     );
     applyEventRow(this.projection, event);
+    this.historyAggregator.apply(event);
+    this.historyAggregator.hydrateProjection(this.projection);
     this.broadcastEvent(event);
     return event;
   }
@@ -103,8 +116,11 @@ export class WorkspaceManager {
 
     for (const event of events) {
       applyEventRow(this.projection, event);
+      this.historyAggregator.apply(event);
       this.broadcastEvent(event);
     }
+
+    this.historyAggregator.hydrateProjection(this.projection);
 
     return events;
   }
@@ -269,9 +285,13 @@ export class WorkspaceManager {
       title: "New Tab",
     });
 
-    window.materializeTab(tabId, url, (changedTabId, title, changedUrl) => {
-      this.handleTabStateChanged(windowId, changedTabId, title, changedUrl);
-    });
+    window.materializeTab(
+      tabId,
+      url,
+      (changedTabId, title, changedUrl) => {
+        this.handleTabStateChanged(windowId, changedTabId, title, changedUrl);
+      },
+    );
     window.switchActiveTab(tabId);
 
     return {
@@ -335,6 +355,7 @@ export class WorkspaceManager {
           this.handleTabStateChanged(windowId, changedTabId, title, url);
         },
         record?.title,
+        record?.history,
       );
     }
 
@@ -384,6 +405,7 @@ export class WorkspaceManager {
             );
           },
           record?.title,
+          record?.history,
         );
       },
       (tabId) =>
@@ -499,6 +521,7 @@ export class WorkspaceManager {
     const record = this.getTabRecord(sourceWorkspaceId, tabId);
     const url = tab?.url ?? record?.url ?? "https://www.google.com";
     const title = tab?.title ?? record?.title ?? "New Tab";
+    const history = record?.history;
     const moveId = createMoveId();
 
     const sourceTopic = this.getWorkspaceTopic(sourceWorkspaceId);
@@ -563,6 +586,7 @@ export class WorkspaceManager {
             );
           },
           title,
+          history,
         );
       }
     }

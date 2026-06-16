@@ -1,5 +1,6 @@
 import { NativeImage, WebContentsView } from "electron";
 import type { TabStateCallback } from "./Window";
+import type { TabHistorySnapshot } from "./workspaces/types";
 
 export class Tab {
   private webContentsView: WebContentsView;
@@ -14,9 +15,10 @@ export class Tab {
     url: string = "https://www.google.com",
     onStateChanged?: TabStateCallback,
     title: string = "New Tab",
+    history?: TabHistorySnapshot,
   ) {
     this._id = id;
-    this._url = url;
+    this._url = this.getInitialUrl(url, history);
     this._title = title;
     this.onStateChanged = onStateChanged;
 
@@ -30,7 +32,11 @@ export class Tab {
     });
 
     this.setupEventListeners();
-    this.loadURL(url);
+    if (history?.entries.length) {
+      void this.restoreHistory(history, url);
+    } else {
+      void this.loadURL(url);
+    }
   }
 
   private setupEventListeners(): void {
@@ -52,6 +58,29 @@ export class Tab {
 
   private notifyStateChanged(): void {
     this.onStateChanged?.(this._id, this._title, this._url);
+  }
+
+  private getInitialUrl(
+    fallbackUrl: string,
+    history?: TabHistorySnapshot,
+  ): string {
+    if (!history || history.entries.length === 0) {
+      return fallbackUrl;
+    }
+
+    return history.entries[history.index]?.url ?? fallbackUrl;
+  }
+
+  private async restoreHistory(
+    history: TabHistorySnapshot,
+    fallbackUrl: string,
+  ): Promise<void> {
+    try {
+      await this.webContentsView.webContents.navigationHistory.restore(history);
+    } catch (error) {
+      console.error("Failed to restore tab history:", error);
+      await this.loadURL(fallbackUrl);
+    }
   }
 
   get id(): string {

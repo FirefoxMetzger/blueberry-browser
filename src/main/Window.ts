@@ -4,6 +4,7 @@ import { Tab } from "./Tab";
 import { TopBar } from "../topBar/mainTopBar";
 import { SideBar } from "../sideBar/mainSideBar";
 import { EventPanel, EVENT_PANEL_WIDTH } from "../eventPanel/mainEventPanel";
+import type { TabHistorySnapshot } from "./workspaces/types";
 
 export type TabStateCallback = (
   tabId: string,
@@ -97,6 +98,7 @@ export class Window {
     url: string,
     onStateChanged?: TabStateCallback,
     title?: string,
+    history?: TabHistorySnapshot,
   ): Tab {
     const existing = this.tabsMap.get(tabId);
     if (existing) {
@@ -107,7 +109,7 @@ export class Window {
       onStateChanged?.(id, title, changedUrl);
     };
 
-    const tab = new Tab(tabId, url, callback, title);
+    const tab = new Tab(tabId, url, callback, title, history);
 
     tab.webContents.setWindowOpenHandler((details) => {
       shell.openExternal(details.url);
