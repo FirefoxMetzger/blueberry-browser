@@ -52,6 +52,16 @@ const sidebarAPI = {
 
   // Tab information
   getActiveTabInfo: () => electronAPI.ipcRenderer.invoke("get-active-tab-info"),
+
+  // Event database
+  queryDatabase: (sql: string, params?: unknown[]) =>
+    electronAPI.ipcRenderer.invoke("db-query", sql, params),
+  onEvent: (callback: (event: unknown) => void) => {
+    electronAPI.ipcRenderer.on("event-logged", (_, event) => callback(event));
+  },
+  removeEventListener: () => {
+    electronAPI.ipcRenderer.removeAllListeners("event-logged");
+  },
 };
 
 // Use `contextBridge` APIs to expose Electron APIs to

@@ -28,6 +28,11 @@ interface TopBarAPI {
 
   // Sidebar
   toggleSidebar: () => Promise<void>;
+
+  // Event database
+  queryDatabase: (sql: string, params?: unknown[]) => Promise<unknown[]>;
+  onEvent: (callback: (event: unknown) => void) => void;
+  removeEventListener: () => void;
 }
 
 declare global {

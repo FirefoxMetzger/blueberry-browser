@@ -3,6 +3,7 @@ import { electronApp } from "@electron-toolkit/utils";
 import { Window } from "./Window";
 import { AppMenu } from "./Menu";
 import { EventManager } from "./EventManager";
+import { eventDatabase } from "./events";
 
 let mainWindow: Window | null = null;
 let eventManager: EventManager | null = null;
@@ -18,6 +19,8 @@ const createWindow = (): Window => {
 app.whenReady().then(() => {
   electronApp.setAppUserModelId("com.electron");
 
+  eventDatabase.init();
+
   mainWindow = createWindow();
 
   app.on("activate", () => {
@@ -27,6 +30,10 @@ app.whenReady().then(() => {
       mainWindow = createWindow();
     }
   });
+});
+
+app.on("will-quit", () => {
+  eventDatabase.close();
 });
 
 app.on("window-all-closed", () => {

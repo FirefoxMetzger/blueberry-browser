@@ -1,5 +1,12 @@
-import { ipcMain, WebContents } from "electron";
+import {
+  ipcMain,
+  IpcMainEvent,
+  IpcMainInvokeEvent,
+  WebContents,
+} from "electron";
 import type { Window } from "./Window";
+import { eventDatabase } from "./events";
+import type { Event } from "./events";
 
 export class EventManager {
   private mainWindow: Window;
@@ -24,27 +31,79 @@ export class EventManager {
 
     // Debug events
     this.handleDebugEvents();
+
+    // Database query (not wrapped to avoid feedback loop)
+    ipcMain.handle("db-query", (_e, sql: string, params: unknown[] = []) =>
+      eventDatabase.query(sql, params)
+    );
+  }
+
+  private handle<T extends unknown[]>(
+    channel: string,
+    handler: (event: IpcMainInvokeEvent, ...args: T) => unknown
+  ): void {
+    ipcMain.handle(channel, async (event, ...args) => {
+      this.logAndBroadcast(channel, args, {
+        sender: event.sender.id,
+        kind: "invoke",
+      });
+      return await handler(event, ...(args as T));
+    });
+  }
+
+  private on<T extends unknown[]>(
+    channel: string,
+    listener: (event: IpcMainEvent, ...args: T) => void
+  ): void {
+    ipcMain.on(channel, (event, ...args) => {
+      this.logAndBroadcast(channel, args, {
+        sender: event.sender.id,
+        kind: "on",
+      });
+      listener(event, ...(args as T));
+    });
+  }
+
+  private logAndBroadcast(
+    channel: string,
+    args: unknown[],
+    metadata: { sender: number; kind: "invoke" | "on" }
+  ): void {
+    const event = eventDatabase.publish(
+      channel,
+      1,
+      args,
+      "rpc-args",
+      metadata,
+      "rpc-meta"
+    );
+    this.broadcastEvent(event);
+  }
+
+  private broadcastEvent(event: Event): void {
+    this.mainWindow.topBar.view.webContents.send("event-logged", event);
+    this.mainWindow.sidebar.view.webContents.send("event-logged", event);
   }
 
   private handleTabEvents(): void {
     // Create new tab
-    ipcMain.handle("create-tab", (_, url?: string) => {
+    this.handle("create-tab", (_, url?: string) => {
       const newTab = this.mainWindow.createTab(url);
       return { id: newTab.id, title: newTab.title, url: newTab.url };
     });
 
     // Close tab
-    ipcMain.handle("close-tab", (_, id: string) => {
+    this.handle("close-tab", (_, id: string) => {
       this.mainWindow.closeTab(id);
     });
 
     // Switch tab
-    ipcMain.handle("switch-tab", (_, id: string) => {
+    this.handle("switch-tab", (_, id: string) => {
       this.mainWindow.switchActiveTab(id);
     });
 
     // Get tabs
-    ipcMain.handle("get-tabs", () => {
+    this.handle("get-tabs", () => {
       const activeTabId = this.mainWindow.activeTab?.id;
       return this.mainWindow.allTabs.map((tab) => ({
         id: tab.id,
@@ -55,13 +114,13 @@ export class EventManager {
     });
 
     // Navigation (for compatibility with existing code)
-    ipcMain.handle("navigate-to", (_, url: string) => {
+    this.handle("navigate-to", (_, url: string) => {
       if (this.mainWindow.activeTab) {
         this.mainWindow.activeTab.loadURL(url);
       }
     });
 
-    ipcMain.handle("navigate-tab", async (_, tabId: string, url: string) => {
+    this.handle("navigate-tab", async (_, tabId: string, url: string) => {
       const tab = this.mainWindow.getTab(tabId);
       if (tab) {
         await tab.loadURL(url);
@@ -70,26 +129,26 @@ export class EventManager {
       return false;
     });
 
-    ipcMain.handle("go-back", () => {
+    this.handle("go-back", () => {
       if (this.mainWindow.activeTab) {
         this.mainWindow.activeTab.goBack();
       }
     });
 
-    ipcMain.handle("go-forward", () => {
+    this.handle("go-forward", () => {
       if (this.mainWindow.activeTab) {
         this.mainWindow.activeTab.goForward();
       }
     });
 
-    ipcMain.handle("reload", () => {
+    this.handle("reload", () => {
       if (this.mainWindow.activeTab) {
         this.mainWindow.activeTab.reload();
       }
     });
 
     // Tab-specific navigation handlers
-    ipcMain.handle("tab-go-back", (_, tabId: string) => {
+    this.handle("tab-go-back", (_, tabId: string) => {
       const tab = this.mainWindow.getTab(tabId);
       if (tab) {
         tab.goBack();
@@ -98,7 +157,7 @@ export class EventManager {
       return false;
     });
 
-    ipcMain.handle("tab-go-forward", (_, tabId: string) => {
+    this.handle("tab-go-forward", (_, tabId: string) => {
       const tab = this.mainWindow.getTab(tabId);
       if (tab) {
         tab.goForward();
@@ -107,7 +166,7 @@ export class EventManager {
       return false;
     });
 
-    ipcMain.handle("tab-reload", (_, tabId: string) => {
+    this.handle("tab-reload", (_, tabId: string) => {
       const tab = this.mainWindow.getTab(tabId);
       if (tab) {
         tab.reload();
@@ -116,7 +175,7 @@ export class EventManager {
       return false;
     });
 
-    ipcMain.handle("tab-screenshot", async (_, tabId: string) => {
+    this.handle("tab-screenshot", async (_, tabId: string) => {
       const tab = this.mainWindow.getTab(tabId);
       if (tab) {
         const image = await tab.screenshot();
@@ -125,7 +184,7 @@ export class EventManager {
       return null;
     });
 
-    ipcMain.handle("tab-run-js", async (_, tabId: string, code: string) => {
+    this.handle("tab-run-js", async (_, tabId: string, code: string) => {
       const tab = this.mainWindow.getTab(tabId);
       if (tab) {
         return await tab.runJs(code);
@@ -134,7 +193,7 @@ export class EventManager {
     });
 
     // Tab info
-    ipcMain.handle("get-active-tab-info", () => {
+    this.handle("get-active-tab-info", () => {
       const activeTab = this.mainWindow.activeTab;
       if (activeTab) {
         return {
@@ -151,33 +210,33 @@ export class EventManager {
 
   private handleSidebarEvents(): void {
     // Toggle sidebar
-    ipcMain.handle("toggle-sidebar", () => {
+    this.handle("toggle-sidebar", () => {
       this.mainWindow.sidebar.toggle();
       this.mainWindow.updateAllBounds();
       return true;
     });
 
     // Chat message
-    ipcMain.handle("sidebar-chat-message", async (_, request) => {
+    this.handle("sidebar-chat-message", async (_, request: { message: string; messageId: string }) => {
       // The LLMClient now handles getting the screenshot and context directly
       await this.mainWindow.sidebar.client.sendChatMessage(request);
     });
 
     // Clear chat
-    ipcMain.handle("sidebar-clear-chat", () => {
+    this.handle("sidebar-clear-chat", () => {
       this.mainWindow.sidebar.client.clearMessages();
       return true;
     });
 
     // Get messages
-    ipcMain.handle("sidebar-get-messages", () => {
+    this.handle("sidebar-get-messages", () => {
       return this.mainWindow.sidebar.client.getMessages();
     });
   }
 
   private handlePageContentEvents(): void {
     // Get page content
-    ipcMain.handle("get-page-content", async () => {
+    this.handle("get-page-content", async () => {
       if (this.mainWindow.activeTab) {
         try {
           return await this.mainWindow.activeTab.getTabHtml();
@@ -190,7 +249,7 @@ export class EventManager {
     });
 
     // Get page text
-    ipcMain.handle("get-page-text", async () => {
+    this.handle("get-page-text", async () => {
       if (this.mainWindow.activeTab) {
         try {
           return await this.mainWindow.activeTab.getTabText();
@@ -203,7 +262,7 @@ export class EventManager {
     });
 
     // Get current URL
-    ipcMain.handle("get-current-url", () => {
+    this.handle("get-current-url", () => {
       if (this.mainWindow.activeTab) {
         return this.mainWindow.activeTab.url;
       }
@@ -213,14 +272,14 @@ export class EventManager {
 
   private handleDarkModeEvents(): void {
     // Dark mode broadcasting
-    ipcMain.on("dark-mode-changed", (event, isDarkMode) => {
-      this.broadcastDarkMode(event.sender, isDarkMode);
+    this.on("dark-mode-changed", (event, isDarkMode) => {
+      this.broadcastDarkMode(event.sender, isDarkMode as boolean);
     });
   }
 
   private handleDebugEvents(): void {
     // Ping test
-    ipcMain.on("ping", () => console.log("pong"));
+    this.on("ping", () => console.log("pong"));
   }
 
   private broadcastDarkMode(sender: WebContents, isDarkMode: boolean): void {
