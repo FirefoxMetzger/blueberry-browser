@@ -71,6 +71,43 @@ export function summarizeToolInput(
       }
       return "active browser tab";
     }
+    case "read_tab": {
+      if (input.tab_id) {
+        return `tab: ${String(input.tab_id)}`;
+      }
+      if (input.query) {
+        return `query: ${String(input.query)}`;
+      }
+      return "active browser tab";
+    }
+    case "open_tab":
+      return `url: ${String(input.url ?? "")}`;
+    case "scroll_tab": {
+      if (input.selector) {
+        return `scroll to ${String(input.selector)}`;
+      }
+      if (input.delta_y !== undefined || input.delta_x !== undefined) {
+        return `scroll by ${String(input.delta_x ?? 0)}, ${String(input.delta_y ?? 0)}`;
+      }
+      return "scroll position";
+    }
+    case "click_tab": {
+      if (input.selector) {
+        return `click ${String(input.selector)}`;
+      }
+      if (input.x !== undefined && input.y !== undefined) {
+        return `click (${String(input.x)}, ${String(input.y)})`;
+      }
+      return "click";
+    }
+    case "go_back_tab":
+      return input.tab_id
+        ? `tab: ${String(input.tab_id)}`
+        : input.query
+          ? `query: ${String(input.query)}`
+          : "active browser tab";
+    case "type_tab":
+      return `type: ${String(input.text ?? "").slice(0, 40)}`;
     default:
       return JSON.stringify(input);
   }
@@ -100,6 +137,31 @@ export function summarizeToolResult(
     }
     case "screenshot":
       return `Captured ${String(record.title ?? "tab")} (${Number(record.width ?? 0)}×${Number(record.height ?? 0)})`;
+    case "read_tab": {
+      const chars = Number(record.charCount ?? 0);
+      const truncated = record.truncated ? " (truncated)" : "";
+      return `Read ${String(record.title ?? "tab")} — ${chars} chars${truncated}`;
+    }
+    case "open_tab": {
+      const loaded = record.loaded ? "loaded" : "opened";
+      return `Opened ${String(record.title ?? "tab")} (${String(record.url ?? "")}), ${loaded}`;
+    }
+    case "scroll_tab":
+      return record.success
+        ? `Scrolled ${String(record.title ?? "tab")}`
+        : `Scroll failed: ${String(record.reason ?? "unknown")}`;
+    case "click_tab":
+      return record.success
+        ? `Clicked in ${String(record.title ?? "tab")}`
+        : `Click failed: ${String(record.reason ?? "unknown")}`;
+    case "go_back_tab":
+      return record.success
+        ? `Went back in ${String(record.title ?? "tab")}`
+        : `Back navigation failed: ${String(record.reason ?? "unknown")}`;
+    case "type_tab":
+      return record.success
+        ? `Typed into ${String(record.title ?? "tab")}`
+        : `Type failed: ${String(record.reason ?? "unknown")}`;
     default:
       return "Done";
   }

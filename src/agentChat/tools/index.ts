@@ -2,7 +2,15 @@ import { tool } from "ai";
 import { z } from "zod";
 import { grepWorkspace } from "./grep";
 import { listWorkspaceTabs } from "./listTabs";
+import { createReadTabTool } from "./readTab";
 import { createScreenshotTool } from "./screenshot";
+import {
+  createClickTabTool,
+  createGoBackTabTool,
+  createOpenTabTool,
+  createScrollTabTool,
+  createTypeTabTool,
+} from "./tabNavigation";
 import type { AgentToolContext } from "./types";
 
 export function createAgentTools(context: AgentToolContext) {
@@ -33,5 +41,11 @@ export function createAgentTools(context: AgentToolContext) {
         grepWorkspace(context, pattern, case_insensitive ?? false),
     }),
     screenshot: createScreenshotTool(context),
+    read_tab: createReadTabTool(context),
+    open_tab: createOpenTabTool(context),
+    scroll_tab: createScrollTabTool(context),
+    click_tab: createClickTabTool(context),
+    go_back_tab: createGoBackTabTool(context),
+    type_tab: createTypeTabTool(context),
   };
 }

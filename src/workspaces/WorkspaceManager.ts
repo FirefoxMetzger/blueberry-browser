@@ -347,6 +347,27 @@ export class WorkspaceManager {
     chat.client.setEnsureBrowserTabResolver(
       (targetTabId) => this.ensureBrowserTabMaterialized(windowId, targetTabId),
     );
+    chat.client.setCreateBrowserTabResolver((url) => {
+      const snapshot = this.createTab(windowId);
+      if (!snapshot) {
+        return null;
+      }
+
+      const normalized = normalizeAddressBarInput(url.trim(), true);
+      if (!normalized) {
+        return null;
+      }
+
+      this.submitAddressBar(windowId, snapshot.id, normalized);
+      return {
+        tabId: snapshot.id,
+        title: snapshot.title,
+        url: normalized,
+      };
+    });
+    chat.client.setSwitchBrowserTabResolver((targetTabId) =>
+      this.switchTab(windowId, targetTabId),
+    );
   }
 
   ensureBrowserTabMaterialized(windowId: string, tabId: string): Tab | null {

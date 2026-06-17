@@ -1,6 +1,9 @@
 import { tool } from "ai";
 import { z } from "zod";
-import type { TabSnapshot } from "../../workspaces/types";
+import {
+  getMaterializedTab,
+  requireBrowserTab,
+} from "./tabUtils";
 import type { AgentToolContext, ScreenshotResult } from "./types";
 
 function imageDataUrlToBase64(dataUrl: string): string {
@@ -13,68 +16,12 @@ function imageDataUrlMediaType(dataUrl: string): string {
   return match?.[1] ?? "image/png";
 }
 
-function getBrowserTabs(context: AgentToolContext): TabSnapshot[] {
-  return context.getWorkspaceTabs().filter(
-    (tab) => tab.kind === "browser" || tab.kind === "pending",
-  );
-}
-
-function resolveBrowserTab(
-  context: AgentToolContext,
-  tabId?: string,
-  query?: string,
-): TabSnapshot | null {
-  const browserTabs = getBrowserTabs(context);
-
-  if (tabId) {
-    return browserTabs.find((tab) => tab.id === tabId) ?? null;
-  }
-
-  if (query?.trim()) {
-    const normalized = query.trim().toLowerCase();
-    return (
-      browserTabs.find(
-        (tab) =>
-          tab.title.toLowerCase().includes(normalized) ||
-          tab.url.toLowerCase().includes(normalized),
-      ) ?? null
-    );
-  }
-
-  return browserTabs[0] ?? null;
-}
-
-function formatAvailableTabs(context: AgentToolContext): string {
-  const tabs = getBrowserTabs(context);
-  if (tabs.length === 0) {
-    return "none";
-  }
-
-  return tabs
-    .map((tab) => `${tab.title} (${tab.url}) [id: ${tab.id}]`)
-    .join("; ");
-}
-
 export async function captureTabScreenshot(
   context: AgentToolContext,
   options: { tab_id?: string; query?: string } = {},
 ): Promise<ScreenshotResult> {
-  const tab = resolveBrowserTab(context, options.tab_id, options.query);
-  if (!tab) {
-    throw new Error(
-      `No matching browser tab found. Available tabs: ${formatAvailableTabs(context)}`,
-    );
-  }
-
-  let materialized = context.window.getTab(tab.id);
-  if (!materialized) {
-    materialized = context.ensureBrowserTab?.(tab.id) ?? null;
-  }
-  if (!materialized) {
-    throw new Error(
-      `Browser tab "${tab.title}" is not loaded. Available tabs: ${formatAvailableTabs(context)}`,
-    );
-  }
+  const tab = requireBrowserTab(context, options.tab_id, options.query);
+  const materialized = await getMaterializedTab(context, tab);
 
   const image = await materialized.screenshot();
   const size = image.getSize();

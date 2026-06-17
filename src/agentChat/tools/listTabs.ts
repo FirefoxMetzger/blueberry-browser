@@ -46,6 +46,9 @@ function formatTabParagraph(
     lines.push(
       `State: ${loaded ? "loaded" : "not loaded"}. Screenshot tool: use query "${queryHint}" or tab_id "${tab.id}".`,
     );
+    lines.push(
+      "Navigation tools: open_tab, scroll_tab, click_tab, go_back_tab, and type_tab can target this tab by tab_id or query. read_tab returns the page as markdown.",
+    );
     lines.push("Grep tool: searches this tab's page text.");
   } else if (tab.kind === "agent-chat") {
     const current =

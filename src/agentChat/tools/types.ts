@@ -8,6 +8,12 @@ export interface AgentToolContext {
   currentChatTabId: string;
   getWorkspaceTabs: () => TabSnapshot[];
   ensureBrowserTab?: (tabId: string) => Tab | null;
+  createBrowserTab?: (url: string) => {
+    tabId: string;
+    title: string;
+    url: string;
+  } | null;
+  switchBrowserTab?: (tabId: string) => boolean;
 }
 
 export interface GrepMatch {
@@ -53,4 +59,13 @@ export interface ScreenshotResult {
   width: number;
   height: number;
   imageDataUrl: string;
+}
+
+export interface ReadTabResult {
+  tabId: string;
+  title: string;
+  url: string;
+  markdown: string;
+  charCount: number;
+  truncated: boolean;
 }

@@ -53,7 +53,7 @@ const DEFAULT_MODELS: Record<LLMProvider, string> = {
 };
 
 const DEFAULT_TEMPERATURE = 0.7;
-const MAX_AGENT_STEPS = 10;
+const MAX_AGENT_STEPS = 75;
 
 export class LLMClient {
   private readonly webContents: WebContents;
@@ -62,6 +62,10 @@ export class LLMClient {
   private getWorkspaceTopic: (() => string | null) | null = null;
   private getWorkspaceTabs: (() => TabSnapshot[]) | null = null;
   private ensureBrowserTab: ((tabId: string) => Tab | null) | null = null;
+  private createBrowserTab:
+    | ((url: string) => { tabId: string; title: string; url: string } | null)
+    | null = null;
+  private switchBrowserTab: ((tabId: string) => boolean) | null = null;
   private readonly provider: LLMProvider;
   private readonly modelName: string;
   private readonly model: LanguageModel | null;
@@ -92,6 +96,18 @@ export class LLMClient {
 
   setEnsureBrowserTabResolver(resolver: (tabId: string) => Tab | null): void {
     this.ensureBrowserTab = resolver;
+  }
+
+  setCreateBrowserTabResolver(
+    resolver: (
+      url: string,
+    ) => { tabId: string; title: string; url: string } | null,
+  ): void {
+    this.createBrowserTab = resolver;
+  }
+
+  setSwitchBrowserTabResolver(resolver: (tabId: string) => boolean): void {
+    this.switchBrowserTab = resolver;
   }
 
   hydrateFromDatabase(excludeEventId?: number): void {
@@ -253,6 +269,8 @@ export class LLMClient {
       currentChatTabId: this.tabId,
       getWorkspaceTabs: this.getWorkspaceTabs,
       ensureBrowserTab: this.ensureBrowserTab ?? undefined,
+      createBrowserTab: this.createBrowserTab ?? undefined,
+      switchBrowserTab: this.switchBrowserTab ?? undefined,
     };
   }
 

@@ -225,6 +225,11 @@ export class Tab {
     await new Promise((resolve) => setTimeout(resolve, 150));
   }
 
+  async waitForLoad(timeoutMs = 15000): Promise<void> {
+    await this.waitForAnyLoad(timeoutMs);
+    await new Promise((resolve) => setTimeout(resolve, 150));
+  }
+
   private async waitForAnyLoad(timeoutMs: number): Promise<void> {
     await new Promise<void>((resolve) => {
       let settled = false;

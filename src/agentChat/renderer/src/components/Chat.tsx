@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useLayoutEffect } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkBreaks from 'remark-breaks'
-import { ArrowUp, Camera, ChevronDown, LayoutList, Loader2, MessageSquare, Search, Wrench } from 'lucide-react'
+import { ArrowUp, ArrowLeft, BookOpen, Camera, ChevronDown, LayoutList, Loader2, MessageSquare, MousePointerClick, Plus, ScrollText, Search, Type, Wrench } from 'lucide-react'
 import { useChat, type Message } from '../contexts/ChatContext'
 import type { GrepMatchCard, ListTabCard } from '../../../displayMessages'
 import { Favicon } from './Favicon'
@@ -144,6 +144,18 @@ const toolIcon = (toolName: string) => {
             return Search
         case 'screenshot':
             return Camera
+        case 'read_tab':
+            return BookOpen
+        case 'open_tab':
+            return Plus
+        case 'scroll_tab':
+            return ScrollText
+        case 'click_tab':
+            return MousePointerClick
+        case 'go_back_tab':
+            return ArrowLeft
+        case 'type_tab':
+            return Type
         default:
             return Wrench
     }
