@@ -9,9 +9,9 @@ import { eventDatabase } from "../events/database";
 import {
   DARK_MODE_CHANGED_TOPIC,
   DARK_MODE_UPDATED_TOPIC,
-  LATEST_DARK_MODE_EVENT_QUERY,
   parseDarkModePayload,
 } from "./shared";
+import { LATEST_DARK_MODE_EVENT_QUERY } from "../events/queries";
 
 interface DarkModeEventRow {
   payload: string;
@@ -40,7 +40,7 @@ export class DarkModeManager {
   private initializeDarkModeFromHistory(): void {
     const rows = eventDatabase.query<DarkModeEventRow>(
       LATEST_DARK_MODE_EVENT_QUERY,
-      [DARK_MODE_CHANGED_TOPIC, DARK_MODE_CHANGED_TOPIC],
+      [DARK_MODE_CHANGED_TOPIC],
     );
     const darkMode = parseDarkModePayload(rows[0]?.payload);
     if (darkMode !== null) {

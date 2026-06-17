@@ -91,15 +91,6 @@ const topBarAPI = {
     electronAPI.ipcRenderer.invoke("tab-run-js", tabId, code),
 
   toggleSidebar: () => electronAPI.ipcRenderer.invoke("toggle-sidebar"),
-
-  queryDatabase: (sql: string, params?: unknown[]) =>
-    electronAPI.ipcRenderer.invoke("db-query", sql, params),
-  onEvent: (callback: (event: unknown) => void) => {
-    electronAPI.ipcRenderer.on("event-logged", (_, event) => callback(event));
-  },
-  removeEventListener: () => {
-    electronAPI.ipcRenderer.removeAllListeners("event-logged");
-  },
 };
 
 if (process.contextIsolated) {

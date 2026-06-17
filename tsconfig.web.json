@@ -9,6 +9,7 @@
     "src/darkMode/**/*",
     "src/**/renderer/**/*",
     "src/**/renderer/**/*.tsx",
+    "src/events/queries.ts",
     "src/*/*.d.ts"
   ],
   "compilerOptions": {

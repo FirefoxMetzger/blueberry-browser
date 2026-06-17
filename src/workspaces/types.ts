@@ -1,5 +1,4 @@
 export const DEFAULT_WORKSPACE_TOPIC = "default";
-const LEGACY_WORKSPACE_TOPIC_PREFIX = "workspace:";
 
 export interface WorkspaceInfo {
   id: string;
@@ -52,13 +51,6 @@ export interface TabSnapshot {
 
 export function workspaceTopic(workspaceName: string): string {
   return workspaceName;
-}
-
-export function parseLegacyWorkspaceTopic(topic: string): string | null {
-  if (!topic.startsWith(LEGACY_WORKSPACE_TOPIC_PREFIX)) {
-    return null;
-  }
-  return topic.slice(LEGACY_WORKSPACE_TOPIC_PREFIX.length);
 }
 
 export function createWorkspaceId(): string {

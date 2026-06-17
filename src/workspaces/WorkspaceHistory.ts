@@ -2,23 +2,6 @@ import type { Event, WorkspaceEventPayloads } from "../events/types";
 import type { GlobalWorkspaceProjection, TabHistorySnapshot } from "./types";
 
 type HistoryEventRow = Pick<Event, "payload_type" | "payload">;
-type NavigationDirection = -1 | 1;
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
-
-function getPayloadTabId(payload: unknown): string | null {
-  if (Array.isArray(payload)) {
-    return typeof payload[0] === "string" ? payload[0] : null;
-  }
-
-  if (isRecord(payload) && typeof payload.tabId === "string") {
-    return payload.tabId;
-  }
-
-  return null;
-}
 
 function createNavigationEntry(
   url: string,
@@ -32,7 +15,6 @@ function createNavigationEntry(
 
 export class TabHistoryAggregator {
   private histories = new Map<string, TabHistorySnapshot>();
-  private pendingDirections = new Map<string, NavigationDirection>();
   private activeTabId: string | null = null;
 
   constructor(rows: HistoryEventRow[] = []) {
@@ -54,31 +36,17 @@ export class TabHistoryAggregator {
         break;
       }
       case "tab-closed": {
-        const tabId = getPayloadTabId(row.payload);
-        if (tabId) {
-          this.histories.delete(tabId);
-          this.pendingDirections.delete(tabId);
-          if (this.activeTabId === tabId) {
-            this.activeTabId = null;
-          }
+        const { tabId } = row.payload as WorkspaceEventPayloads["tab-closed"];
+        this.histories.delete(tabId);
+        if (this.activeTabId === tabId) {
+          this.activeTabId = null;
         }
         break;
       }
       case "tab-activated": {
-        const tabId = getPayloadTabId(row.payload);
-        if (tabId) {
-          this.activeTabId = tabId;
-        }
-        break;
-      }
-      case "tab-go-back":
-      case "go-back": {
-        this.markPendingDirection(row.payload, -1);
-        break;
-      }
-      case "tab-go-forward":
-      case "go-forward": {
-        this.markPendingDirection(row.payload, 1);
+        const { tabId } =
+          row.payload as WorkspaceEventPayloads["tab-activated"];
+        this.activeTabId = tabId;
         break;
       }
       case "tab-url-changed": {
@@ -118,34 +86,12 @@ export class TabHistoryAggregator {
     }
   }
 
-  private markPendingDirection(
-    payload: unknown,
-    direction: NavigationDirection,
-  ): void {
-    const tabId = getPayloadTabId(payload) ?? this.activeTabId;
-    if (tabId) {
-      this.pendingDirections.set(tabId, direction);
-    }
-  }
-
   private applyUrlChange(tabId: string, url: string): void {
     const history = this.ensureHistory(tabId, url);
     const current = history.entries[history.index];
-    const direction = this.pendingDirections.get(tabId);
-
-    this.pendingDirections.delete(tabId);
 
     if (current?.url === url) {
       return;
-    }
-
-    if (direction) {
-      const targetIndex = history.index + direction;
-      const target = history.entries[targetIndex];
-      if (target?.url === url) {
-        history.index = targetIndex;
-        return;
-      }
     }
 
     history.entries = history.entries.slice(0, history.index + 1);

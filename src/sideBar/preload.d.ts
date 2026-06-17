@@ -34,11 +34,6 @@ interface SidebarAPI {
 
   // Tab information
   getActiveTabInfo: () => Promise<TabInfo | null>;
-
-  // Event database
-  queryDatabase: (sql: string, params?: unknown[]) => Promise<unknown[]>;
-  onEvent: (callback: (event: unknown) => void) => void;
-  removeEventListener: () => void;
 }
 
 declare global {

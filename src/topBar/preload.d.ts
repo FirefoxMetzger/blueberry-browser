@@ -62,10 +62,6 @@ interface TopBarAPI {
   tabRunJs: (tabId: string, code: string) => Promise<unknown>;
 
   toggleSidebar: () => Promise<void>;
-
-  queryDatabase: (sql: string, params?: unknown[]) => Promise<unknown[]>;
-  onEvent: (callback: (event: unknown) => void) => void;
-  removeEventListener: () => void;
 }
 
 declare global {

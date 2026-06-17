@@ -12,14 +12,6 @@ import { eventDatabase } from "./database";
 import type { Event } from "./types";
 
 const DEFAULT_EVENT_TOPIC = DEFAULT_WORKSPACE_TOPIC;
-const LATEST_WORKSPACE_SWITCH_QUERY = `
-  SELECT topic
-  FROM events
-  WHERE payload_type = 'workspace-switched'
-    AND json_extract(payload, '$.windowId') = ?
-  ORDER BY id DESC
-  LIMIT 1
-`;
 
 type EventMetadata =
   | { sender: number; kind: "invoke" | "on" }
@@ -33,10 +25,6 @@ type EventHandlerOptions = {
 interface PopupPoint {
   x: number;
   y: number;
-}
-
-interface WorkspaceSwitchEventRow {
-  topic: string;
 }
 
 export class EventManager {
@@ -163,20 +151,15 @@ export class EventManager {
       : (topic ?? DEFAULT_EVENT_TOPIC);
   }
 
-  private getActiveWorkspaceTopicFromHistory(): string {
-    const [row] = eventDatabase.query<WorkspaceSwitchEventRow>(
-      LATEST_WORKSPACE_SWITCH_QUERY,
-      [this.mainWindow.id],
-    );
-
-    return row?.topic ?? DEFAULT_EVENT_TOPIC;
+  private getActiveWorkspaceTopic(): string {
+    return this.workspaceManager.getActiveWorkspaceTopic(this.mainWindow.id);
   }
 
   private getActiveTabWorkspaceTopic(): string {
     const activeTabId = this.mainWindow.activeTab?.id;
     return activeTabId
       ? this.getTabWorkspaceTopic(activeTabId)
-      : this.getActiveWorkspaceTopicFromHistory();
+      : this.getActiveWorkspaceTopic();
   }
 
   private getTabWorkspaceTopic(tabId: unknown): string {
@@ -186,7 +169,7 @@ export class EventManager {
 
     return (
       this.workspaceManager.getTabWorkspaceTopic(this.mainWindow.id, tabId) ??
-      this.getActiveWorkspaceTopicFromHistory()
+      this.getActiveWorkspaceTopic()
     );
   }
 
@@ -200,7 +183,7 @@ export class EventManager {
       case "go-forward":
         return this.getActiveTabWorkspaceTopic();
       default:
-        return this.getActiveWorkspaceTopicFromHistory();
+        return this.getActiveWorkspaceTopic();
     }
   }
 
@@ -234,8 +217,7 @@ export class EventManager {
 
   private handleTabEvents(): void {
     const windowId = (): string => this.mainWindow.id;
-    const activeWorkspaceTopic = (): string =>
-      this.getActiveWorkspaceTopicFromHistory();
+    const activeWorkspaceTopic = (): string => this.getActiveWorkspaceTopic();
     const activeTabWorkspaceTopic = (): string =>
       this.getActiveTabWorkspaceTopic();
     const tabWorkspaceTopic = (tabId: unknown): string =>
@@ -393,8 +375,7 @@ export class EventManager {
 
   private handleWorkspaceEvents(): void {
     const windowId = (): string => this.mainWindow.id;
-    const activeWorkspaceTopic = (): string =>
-      this.getActiveWorkspaceTopicFromHistory();
+    const activeWorkspaceTopic = (): string => this.getActiveWorkspaceTopic();
     const tabWorkspaceTopic = (tabId: unknown): string =>
       this.getTabWorkspaceTopic(tabId);
     const topicForWorkspaceId = (workspaceId: unknown): string =>
@@ -601,8 +582,7 @@ export class EventManager {
   }
 
   private handleSidebarEvents(): void {
-    const activeWorkspaceTopic = (): string =>
-      this.getActiveWorkspaceTopicFromHistory();
+    const activeWorkspaceTopic = (): string => this.getActiveWorkspaceTopic();
 
     this.handle(
       "toggle-sidebar",

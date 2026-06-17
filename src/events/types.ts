@@ -25,7 +25,6 @@ export interface WorkspaceEventPayloads {
     title: string;
   };
   "workspace-created": { workspaceId: string; name: string };
-  "workspace-renamed": { workspaceId: string; name: string };
   "workspace-removed": { workspaceId: string };
   "workspace-switched": { windowId: string; workspaceId: string };
 }

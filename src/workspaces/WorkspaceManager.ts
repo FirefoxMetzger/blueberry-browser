@@ -4,6 +4,7 @@ import type {
   WorkspacePayloadType,
 } from "../events/types";
 import { eventDatabase } from "../events/database";
+import { WORKSPACE_EVENTS_QUERY, LATEST_WORKSPACE_SWITCH_QUERY } from "../events/queries";
 import type { Window } from "../main/Window";
 import { applyEventRow, replayProjection } from "./WorkspaceProjection";
 import { TabHistoryAggregator } from "./WorkspaceHistory";
@@ -12,6 +13,7 @@ import {
   createTabId,
   createWorkspaceId,
   DEFAULT_WORKSPACE_ID,
+  DEFAULT_WORKSPACE_TOPIC,
   type GlobalWorkspaceProjection,
   type TabRecord,
   type TabSnapshot,
@@ -26,20 +28,16 @@ import {
   isValidWorkspaceDirName,
 } from "./workspaceContextDirs";
 
-const WORKSPACE_EVENTS_QUERY = `
-  SELECT topic, payload_type, payload
-  FROM events
-  WHERE topic = 'default'
-     OR metadata_type = 'workspace-meta'
-  ORDER BY id ASC
-`;
-
 const DOMAIN_METADATA = { source: "workspace-manager" as const };
 const DOMAIN_METADATA_TYPE = "workspace-meta";
 
 interface StoredEventRow {
   topic: string;
   payload_type: string;
+  payload: string;
+}
+
+interface WorkspaceSwitchEventRow {
   payload: string;
 }
 
@@ -141,16 +139,48 @@ export class WorkspaceManager {
   registerWindow(window: Window): string {
     const windowId = window.id;
     this.windows.set(windowId, window);
-    this.windowWorkspaceSelection.set(windowId, DEFAULT_WORKSPACE_ID);
 
-    const defaultWorkspace =
-      this.projection.workspaces.get(DEFAULT_WORKSPACE_ID);
-    if (!defaultWorkspace || defaultWorkspace.tabOrder.length === 0) {
-      this.createTab(windowId, "https://www.google.com");
+    const startupWorkspaceId = this.getStartupWorkspaceId();
+    this.windowWorkspaceSelection.set(windowId, startupWorkspaceId);
+
+    const workspace = this.projection.workspaces.get(startupWorkspaceId);
+    if (!workspace || workspace.tabOrder.length === 0) {
+      if (startupWorkspaceId === DEFAULT_WORKSPACE_ID) {
+        this.createTab(windowId, "https://www.google.com");
+      } else {
+        this.switchWorkspace(windowId, startupWorkspaceId);
+      }
     } else {
-      this.switchWorkspace(windowId, DEFAULT_WORKSPACE_ID);
+      this.switchWorkspace(windowId, startupWorkspaceId);
     }
     return windowId;
+  }
+
+  private getStartupWorkspaceId(): string {
+    const lastWorkspaceId = this.loadLastActiveWorkspaceIdFromHistory();
+    if (
+      lastWorkspaceId &&
+      this.projection.workspaces.has(lastWorkspaceId)
+    ) {
+      return lastWorkspaceId;
+    }
+    return DEFAULT_WORKSPACE_ID;
+  }
+
+  private loadLastActiveWorkspaceIdFromHistory(): string | null {
+    const [row] = eventDatabase.query<WorkspaceSwitchEventRow>(
+      LATEST_WORKSPACE_SWITCH_QUERY,
+    );
+    if (!row) {
+      return null;
+    }
+
+    try {
+      const payload = JSON.parse(row.payload) as { workspaceId?: string };
+      return typeof payload.workspaceId === "string" ? payload.workspaceId : null;
+    } catch {
+      return null;
+    }
   }
 
   unregisterWindow(windowId: string): void {
@@ -160,6 +190,10 @@ export class WorkspaceManager {
 
   getSelectedWorkspaceId(windowId: string): string {
     return this.windowWorkspaceSelection.get(windowId) ?? DEFAULT_WORKSPACE_ID;
+  }
+
+  getActiveWorkspaceTopic(windowId: string): string {
+    return this.getWorkspaceTopic(this.getSelectedWorkspaceId(windowId));
   }
 
   getWorkspaces(windowId: string): WorkspaceInfo[] {
@@ -234,7 +268,7 @@ export class WorkspaceManager {
 
   getWorkspaceTopic(workspaceId: string): string {
     const workspace = this.getWorkspaceState(workspaceId);
-    return workspace?.topic ?? workspaceTopic(workspaceId);
+    return workspace?.topic ?? DEFAULT_WORKSPACE_TOPIC;
   }
 
   getTabWorkspaceTopic(windowId: string, tabId: string): string | null {

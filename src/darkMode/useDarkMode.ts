@@ -2,9 +2,9 @@ import { useCallback, useEffect, useState } from "react";
 import {
   DARK_MODE_CHANGED_TOPIC,
   DARK_MODE_UPDATED_TOPIC,
-  LATEST_DARK_MODE_EVENT_QUERY,
   parseDarkModePayload,
 } from "./shared";
+import { LATEST_DARK_MODE_EVENT_QUERY } from "../events/queries";
 
 interface DarkModeEventRow {
   payload: string;
@@ -26,7 +26,6 @@ export const useDarkMode = () => {
 
     window.electron.ipcRenderer
       .invoke("db-query", LATEST_DARK_MODE_EVENT_QUERY, [
-        DARK_MODE_CHANGED_TOPIC,
         DARK_MODE_CHANGED_TOPIC,
       ])
       .then((rows: DarkModeEventRow[]) => {

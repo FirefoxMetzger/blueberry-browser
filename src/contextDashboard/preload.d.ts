@@ -15,7 +15,7 @@ interface WorkspaceContext {
 
 interface ContextDashboardAPI {
   getActiveWorkspaceContext: () => Promise<WorkspaceContext>;
-  queryDatabase: (sql: string, params?: unknown[]) => Promise<EventLogEntry[]>;
+  queryDatabase: <T = unknown>(sql: string, params?: unknown[]) => Promise<T[]>;
   onEvent: (callback: (event: EventLogEntry) => void) => void;
   removeEventListener: () => void;
   onWorkspaceContextUpdated: (callback: (context: WorkspaceContext) => void) => void;

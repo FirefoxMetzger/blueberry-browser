@@ -2,7 +2,6 @@ import type { Event, WorkspaceEventPayloads } from "../events/types";
 import {
   DEFAULT_WORKSPACE_ID,
   DEFAULT_WORKSPACE_TOPIC,
-  parseLegacyWorkspaceTopic,
   type GlobalWorkspaceProjection,
   type WorkspaceState,
   workspaceTopic,
@@ -80,16 +79,6 @@ function applyWorkspaceEvent(
       }
       break;
     }
-    case "workspace-renamed": {
-      const { workspaceId, name } =
-        payload as WorkspaceEventPayloads["workspace-renamed"];
-      const workspace = projection.workspaces.get(workspaceId);
-      if (workspace) {
-        workspace.name = name;
-        workspace.topic = workspaceTopic(name);
-      }
-      break;
-    }
     case "workspace-removed": {
       const { workspaceId } =
         payload as WorkspaceEventPayloads["workspace-removed"];
@@ -113,10 +102,7 @@ function getWorkspaceByTopic(
     }
   }
 
-  const legacyWorkspaceId = parseLegacyWorkspaceTopic(topic);
-  return legacyWorkspaceId
-    ? projection.workspaces.get(legacyWorkspaceId)
-    : undefined;
+  return undefined;
 }
 
 function applyTabEventToWorkspace(
@@ -185,7 +171,6 @@ export function applyEventRow(
 
   if (
     payloadType === "workspace-created" ||
-    payloadType === "workspace-renamed" ||
     payloadType === "workspace-removed"
   ) {
     applyWorkspaceEvent(projection, payloadType, payload);
@@ -200,19 +185,7 @@ export function applyEventRow(
     return;
   }
 
-  let workspace = getWorkspaceByTopic(projection, topic);
-  if (!workspace && payloadType === "tab-moved") {
-    const move = payload as WorkspaceEventPayloads["tab-moved"];
-    if (move.direction === "in") {
-      workspace = createEmptyWorkspaceState(
-        move.toWorkspaceId,
-        move.toWorkspaceId,
-        topic,
-      );
-      projection.workspaces.set(move.toWorkspaceId, workspace);
-    }
-  }
-
+  const workspace = getWorkspaceByTopic(projection, topic);
   if (workspace) {
     applyTabEventToWorkspace(workspace, payloadType, payload);
   }
