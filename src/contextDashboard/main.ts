@@ -3,23 +3,22 @@ import { BaseWindow, WebContentsView } from "electron";
 import { join } from "path";
 import { TOPBAR_BASE_HEIGHT } from "../main/layout";
 
-export const EVENT_PANEL_WIDTH = 280;
-
-export class EventPanel {
+export class ContextDashboard {
   private webContentsView: WebContentsView;
   private baseWindow: BaseWindow;
+  private isVisible = false;
 
   constructor(baseWindow: BaseWindow) {
     this.baseWindow = baseWindow;
     this.webContentsView = this.createWebContentsView();
     baseWindow.contentView.addChildView(this.webContentsView);
-    this.setupBounds();
+    this.webContentsView.setVisible(false);
   }
 
   private createWebContentsView(): WebContentsView {
     const webContentsView = new WebContentsView({
       webPreferences: {
-        preload: join(__dirname, "../preload/preloadEventPanel.js"),
+        preload: join(__dirname, "../preload/contextDashboard.js"),
         nodeIntegration: false,
         contextIsolation: true,
         sandbox: false,
@@ -27,32 +26,52 @@ export class EventPanel {
     });
 
     if (is.dev && process.env["ELECTRON_RENDERER_URL"]) {
-      const eventPanelUrl = new URL(
-        "/eventPanel/renderer/",
+      const contextDashboardUrl = new URL(
+        "/contextDashboard/renderer/",
         process.env["ELECTRON_RENDERER_URL"],
       );
-      webContentsView.webContents.loadURL(eventPanelUrl.toString());
+      webContentsView.webContents.loadURL(contextDashboardUrl.toString());
     } else {
       webContentsView.webContents.loadFile(
-        join(__dirname, "../renderer/eventPanel/renderer/index.html"),
+        join(__dirname, "../renderer/contextDashboard/renderer/index.html"),
       );
     }
 
     return webContentsView;
   }
 
-  private setupBounds(contentTop = TOPBAR_BASE_HEIGHT): void {
+  private setupBounds(
+    contentTop = TOPBAR_BASE_HEIGHT,
+    sidebarWidth = 0,
+  ): void {
     const bounds = this.baseWindow.getBounds();
     this.webContentsView.setBounds({
       x: 0,
       y: contentTop,
-      width: EVENT_PANEL_WIDTH,
+      width: bounds.width - sidebarWidth,
       height: bounds.height - contentTop,
     });
   }
 
-  updateBounds(contentTop = TOPBAR_BASE_HEIGHT): void {
-    this.setupBounds(contentTop);
+  updateBounds(contentTop = TOPBAR_BASE_HEIGHT, sidebarWidth = 0): void {
+    if (this.isVisible) {
+      this.setupBounds(contentTop, sidebarWidth);
+    }
+  }
+
+  show(contentTop = TOPBAR_BASE_HEIGHT, sidebarWidth = 0): void {
+    this.isVisible = true;
+    this.setupBounds(contentTop, sidebarWidth);
+    this.webContentsView.setVisible(true);
+  }
+
+  hide(): void {
+    this.isVisible = false;
+    this.webContentsView.setVisible(false);
+  }
+
+  getIsVisible(): boolean {
+    return this.isVisible;
   }
 
   get view(): WebContentsView {

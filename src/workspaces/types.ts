@@ -39,6 +39,7 @@ export interface WorkspaceSnapshot {
   workspaces: WorkspaceInfo[];
   activeWorkspaceId: string;
   tabs: TabSnapshot[];
+  contextDashboardVisible: boolean;
 }
 
 export interface TabSnapshot {

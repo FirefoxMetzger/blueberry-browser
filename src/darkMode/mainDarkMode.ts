@@ -55,7 +55,7 @@ export class DarkModeManager {
   private broadcastDarkMode(sender: WebContents, isDarkMode: boolean): void {
     const recipients = [
       this.mainWindow.topBar.view.webContents,
-      this.mainWindow.eventPanel.view.webContents,
+      this.mainWindow.contextDashboard.view.webContents,
       this.mainWindow.sidebar.view.webContents,
       ...this.mainWindow.allTabs.map((tab) => tab.webContents),
     ];

@@ -27,6 +27,7 @@ interface WorkspaceSnapshot {
   workspaces: WorkspaceInfo[];
   activeWorkspaceId: string;
   tabs: TabInfo[];
+  contextDashboardVisible: boolean;
 }
 
 interface BrowserContextType {
@@ -34,6 +35,7 @@ interface BrowserContextType {
   workspaces: WorkspaceInfo[];
   activeWorkspaceId: string;
   activeTab: TabInfo | null;
+  contextDashboardVisible: boolean;
   isLoading: boolean;
 
   createTab: (url?: string) => Promise<void>;
@@ -71,10 +73,12 @@ const applySnapshot = (
   setWorkspaces: React.Dispatch<React.SetStateAction<WorkspaceInfo[]>>,
   setActiveWorkspaceId: React.Dispatch<React.SetStateAction<string>>,
   setTabs: React.Dispatch<React.SetStateAction<TabInfo[]>>,
+  setContextDashboardVisible: React.Dispatch<React.SetStateAction<boolean>>,
 ): void => {
   setWorkspaces(snapshot.workspaces);
   setActiveWorkspaceId(snapshot.activeWorkspaceId);
   setTabs(snapshot.tabs);
+  setContextDashboardVisible(snapshot.contextDashboardVisible);
 };
 
 export const BrowserProvider: React.FC<{ children: React.ReactNode }> = ({
@@ -83,6 +87,7 @@ export const BrowserProvider: React.FC<{ children: React.ReactNode }> = ({
   const [tabs, setTabs] = useState<TabInfo[]>([]);
   const [workspaces, setWorkspaces] = useState<WorkspaceInfo[]>([]);
   const [activeWorkspaceId, setActiveWorkspaceId] = useState("default");
+  const [contextDashboardVisible, setContextDashboardVisible] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
   const activeTab = tabs.find((tab) => tab.isActive) || null;
@@ -90,7 +95,7 @@ export const BrowserProvider: React.FC<{ children: React.ReactNode }> = ({
   const refreshTabs = useCallback(async () => {
     try {
       const snapshot = await window.topBarAPI.getWorkspaceState();
-      applySnapshot(snapshot, setWorkspaces, setActiveWorkspaceId, setTabs);
+      applySnapshot(snapshot, setWorkspaces, setActiveWorkspaceId, setTabs, setContextDashboardVisible);
     } catch (error) {
       console.error("Failed to refresh workspace state:", error);
     }
@@ -237,7 +242,7 @@ export const BrowserProvider: React.FC<{ children: React.ReactNode }> = ({
 
   useEffect(() => {
     const handleSnapshot = (snapshot: WorkspaceSnapshot): void => {
-      applySnapshot(snapshot, setWorkspaces, setActiveWorkspaceId, setTabs);
+      applySnapshot(snapshot, setWorkspaces, setActiveWorkspaceId, setTabs, setContextDashboardVisible);
     };
 
     window.topBarAPI.onTabsUpdated(setTabs);
@@ -254,6 +259,7 @@ export const BrowserProvider: React.FC<{ children: React.ReactNode }> = ({
     workspaces,
     activeWorkspaceId,
     activeTab,
+    contextDashboardVisible,
     isLoading,
     createTab,
     closeTab,

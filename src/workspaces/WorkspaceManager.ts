@@ -192,6 +192,7 @@ export class WorkspaceManager {
       workspaces: this.getWorkspaces(windowId),
       activeWorkspaceId,
       tabs,
+      contextDashboardVisible: window?.isContextDashboardVisible() ?? false,
     };
   }
 
@@ -350,6 +351,17 @@ export class WorkspaceManager {
       },
     );
 
+    this.notifyStateChanged();
+    return true;
+  }
+
+  showContextDashboard(windowId: string): boolean {
+    const window = this.windows.get(windowId);
+    if (!window) {
+      return false;
+    }
+
+    window.showContextDashboard();
     this.notifyStateChanged();
     return true;
   }

@@ -1,10 +1,10 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
-import { EventPanelApp } from './EventPanelApp'
+import { ContextDashboardApp } from './ContextDashboardApp'
 import './index.css'
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
     <React.StrictMode>
-        <EventPanelApp />
+        <ContextDashboardApp />
     </React.StrictMode>
 )

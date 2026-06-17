@@ -71,6 +71,24 @@ export class EventManager {
           : [];
       return eventDatabase.query(sql, boundParams);
     });
+
+    ipcMain.handle("get-active-workspace-context", () => {
+      return this.getActiveWorkspaceContext();
+    });
+  }
+
+  private getActiveWorkspaceContext(): { topic: string; name: string } {
+    const windowId = this.mainWindow.id;
+    const workspaceId = this.workspaceManager.getSelectedWorkspaceId(windowId);
+    const topic = this.workspaceManager.getWorkspaceTopic(workspaceId);
+    const workspace = this.workspaceManager
+      .getWorkspaces(windowId)
+      .find((entry) => entry.id === workspaceId);
+
+    return {
+      topic,
+      name: workspace?.name ?? "Default",
+    };
   }
 
   private handle<T extends unknown[]>(
@@ -188,18 +206,26 @@ export class EventManager {
 
   public broadcastEvent(event: Event): void {
     this.mainWindow.topBar.view.webContents.send("event-logged", event);
-    this.mainWindow.eventPanel.view.webContents.send("event-logged", event);
+    this.mainWindow.contextDashboard.view.webContents.send("event-logged", event);
     this.mainWindow.sidebar.view.webContents.send("event-logged", event);
   }
 
   public broadcastWorkspaceState(window?: Window): void {
     const targetWindow = window ?? this.mainWindow;
     const snapshot = this.workspaceManager.getSnapshot(targetWindow.id);
+    const activeWorkspace = snapshot.workspaces.find(
+      (workspace) => workspace.id === snapshot.activeWorkspaceId,
+    );
+
     targetWindow.topBar.view.webContents.send("tabs-updated", snapshot.tabs);
     targetWindow.topBar.view.webContents.send(
       "workspace-state-updated",
       snapshot,
     );
+    targetWindow.contextDashboard.view.webContents.send("workspace-context-updated", {
+      topic: activeWorkspace?.topic ?? DEFAULT_EVENT_TOPIC,
+      name: activeWorkspace?.name ?? "Default",
+    });
   }
 
   private broadcastWorkspaceStateInternal(): void {
@@ -435,6 +461,15 @@ export class EventManager {
         return true;
       },
       { skipRpcLog: true },
+    );
+
+    this.handle(
+      "show-context-dashboard",
+      () => {
+        this.workspaceManager.showContextDashboard(windowId());
+        return true;
+      },
+      { topic: activeWorkspaceTopic },
     );
 
     this.handle(

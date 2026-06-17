@@ -3,8 +3,6 @@ import { BaseWindow, WebContentsView } from "electron";
 import { join } from "path";
 import { TOPBAR_BASE_HEIGHT } from "../main/layout";
 
-export { TOPBAR_BASE_HEIGHT };
-
 export class TopBar {
   private webContentsView: WebContentsView;
   private baseWindow: BaseWindow;
@@ -19,7 +17,7 @@ export class TopBar {
   private createWebContentsView(): WebContentsView {
     const webContentsView = new WebContentsView({
       webPreferences: {
-        preload: join(__dirname, "../preload/preloadTopBar.js"),
+        preload: join(__dirname, "../preload/topBar.js"),
         nodeIntegration: false,
         contextIsolation: true,
         sandbox: false,

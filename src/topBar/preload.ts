@@ -22,6 +22,7 @@ interface WorkspaceSnapshot {
   workspaces: WorkspaceInfo[];
   activeWorkspaceId: string;
   tabs: TabInfo[];
+  contextDashboardVisible: boolean;
 }
 
 interface PopupPoint {
@@ -57,6 +58,7 @@ const topBarAPI = {
     electronAPI.ipcRenderer.invoke("move-tab-to-workspace", tabId, workspaceId),
   openWorkspaceMenu: (point: PopupPoint) =>
     electronAPI.ipcRenderer.invoke("open-workspace-menu", point),
+  showContextDashboard: () => electronAPI.ipcRenderer.invoke("show-context-dashboard"),
   openTabContextMenu: (tabId: string, point: PopupPoint) =>
     electronAPI.ipcRenderer.invoke("open-tab-context-menu", tabId, point),
   onWorkspaceStateUpdated: (callback: (state: WorkspaceSnapshot) => void) => {

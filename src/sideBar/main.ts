@@ -23,7 +23,7 @@ export class SideBar {
   private createWebContentsView(): WebContentsView {
     const webContentsView = new WebContentsView({
       webPreferences: {
-        preload: join(__dirname, "../preload/preloadSideBar.js"),
+        preload: join(__dirname, "../preload/sideBar.js"),
         nodeIntegration: false,
         contextIsolation: true,
         sandbox: false, // Need to disable sandbox for preload to work

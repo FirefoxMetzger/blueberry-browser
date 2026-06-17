@@ -8,15 +8,25 @@ interface EventLogEntry {
   created: string;
 }
 
-interface EventPanelAPI {
+interface WorkspaceContext {
+  topic: string;
+  name: string;
+}
+
+interface ContextDashboardAPI {
+  getActiveWorkspaceContext: () => Promise<WorkspaceContext>;
   queryDatabase: (sql: string, params?: unknown[]) => Promise<EventLogEntry[]>;
   onEvent: (callback: (event: EventLogEntry) => void) => void;
   removeEventListener: () => void;
+  onWorkspaceContextUpdated: (callback: (context: WorkspaceContext) => void) => void;
+  removeWorkspaceContextUpdatedListener: () => void;
 }
 
 declare global {
   interface Window {
     electron: ElectronAPI;
-    eventPanelAPI: EventPanelAPI;
+    contextDashboardAPI: ContextDashboardAPI;
   }
 }
+
+export type { EventLogEntry, WorkspaceContext };

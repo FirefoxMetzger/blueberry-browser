@@ -1,9 +1,9 @@
 import { randomUUID } from "crypto";
 import { BaseWindow, shell } from "electron";
 import { Tab } from "./Tab";
-import { TopBar } from "../topBar/mainTopBar";
-import { SideBar } from "../sideBar/mainSideBar";
-import { EventPanel, EVENT_PANEL_WIDTH } from "../eventPanel/mainEventPanel";
+import { TopBar } from "../topBar/main";
+import { SideBar } from "../sideBar/main";
+import { ContextDashboard } from "../contextDashboard/main";
 import type { TabHistorySnapshot } from "../workspaces/types";
 
 export type TabStateCallback = (
@@ -19,7 +19,8 @@ export class Window {
   private activeTabId: string | null = null;
   private _topBar: TopBar;
   private _sideBar: SideBar;
-  private _eventPanel: EventPanel;
+  private _contextDashboard: ContextDashboard;
+  private contextDashboardVisible = false;
   private tabsChangedListeners = new Set<() => void>();
   private tabStateCallbacks = new Map<string, TabStateCallback>();
 
@@ -39,7 +40,7 @@ export class Window {
     this._baseWindow.setMinimumSize(1000, 800);
 
     this._topBar = new TopBar(this._baseWindow);
-    this._eventPanel = new EventPanel(this._baseWindow);
+    this._contextDashboard = new ContextDashboard(this._baseWindow);
     this._sideBar = new SideBar(this._baseWindow);
 
     this._sideBar.client.setWindow(this);
@@ -188,6 +189,8 @@ export class Window {
       return false;
     }
 
+    this.hideContextDashboard();
+
     if (this.activeTabId && this.activeTabId !== tabId) {
       const currentTab = this.tabsMap.get(this.activeTabId);
       currentTab?.hide();
@@ -198,6 +201,38 @@ export class Window {
     this._baseWindow.setTitle(tab.title || "Blueberry Browser");
     this.notifyTabsChanged();
     return true;
+  }
+
+  showContextDashboard(): void {
+    if (this.contextDashboardVisible) {
+      return;
+    }
+
+    if (this.activeTabId) {
+      const currentTab = this.tabsMap.get(this.activeTabId);
+      currentTab?.hide();
+      this.activeTabId = null;
+    }
+
+    this.contextDashboardVisible = true;
+    const contentTop = this.getContentTop();
+    const sidebarWidth = this._sideBar.getIsVisible() ? 400 : 0;
+    this._contextDashboard.show(contentTop, sidebarWidth);
+    this._baseWindow.setTitle("Blueberry Browser");
+    this.notifyTabsChanged();
+  }
+
+  hideContextDashboard(): void {
+    if (!this.contextDashboardVisible) {
+      return;
+    }
+
+    this.contextDashboardVisible = false;
+    this._contextDashboard.hide();
+  }
+
+  isContextDashboardVisible(): boolean {
+    return this.contextDashboardVisible;
   }
 
   clearActiveTab(): void {
@@ -278,9 +313,9 @@ export class Window {
     const sidebarWidth = this._sideBar.getIsVisible() ? 400 : 0;
     const contentTop = this.getContentTop();
     tab.view.setBounds({
-      x: EVENT_PANEL_WIDTH,
+      x: 0,
       y: contentTop,
-      width: bounds.width - EVENT_PANEL_WIDTH - sidebarWidth,
+      width: bounds.width - sidebarWidth,
       height: bounds.height - contentTop,
     });
   }
@@ -291,9 +326,10 @@ export class Window {
 
   updateAllBounds(): void {
     const contentTop = this.getContentTop();
+    const sidebarWidth = this._sideBar.getIsVisible() ? 400 : 0;
     this._topBar.updateBounds();
     this.updateTabBounds();
-    this._eventPanel.updateBounds(contentTop);
+    this._contextDashboard.updateBounds(contentTop, sidebarWidth);
     this._sideBar.updateBounds(contentTop);
   }
 
@@ -305,8 +341,8 @@ export class Window {
     return this._sideBar;
   }
 
-  get eventPanel(): EventPanel {
-    return this._eventPanel;
+  get contextDashboard(): ContextDashboard {
+    return this._contextDashboard;
   }
 
   get topBar(): TopBar {

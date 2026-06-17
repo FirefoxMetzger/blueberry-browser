@@ -11,11 +11,11 @@ export default defineConfig({
     build: {
       rollupOptions: {
         input: {
-          preloadTopBar: resolve(__dirname, "src/topBar/preloadTopBar.ts"),
-          preloadSideBar: resolve(__dirname, "src/sideBar/preloadSideBar.ts"),
-          preloadEventPanel: resolve(
+          topBar: resolve(__dirname, "src/topBar/preload.ts"),
+          sideBar: resolve(__dirname, "src/sideBar/preload.ts"),
+          contextDashboard: resolve(
             __dirname,
-            "src/eventPanel/preloadEventPanel.ts",
+            "src/contextDashboard/preload.ts",
           ),
         },
       },
@@ -28,7 +28,7 @@ export default defineConfig({
         input: {
           topbar: resolve(__dirname, "src/topBar/renderer/index.html"),
           sidebar: resolve(__dirname, "src/sideBar/renderer/index.html"),
-          eventpanel: resolve(__dirname, "src/eventPanel/renderer/index.html"),
+          contextdashboard: resolve(__dirname, "src/contextDashboard/renderer/index.html"),
         },
       },
     },

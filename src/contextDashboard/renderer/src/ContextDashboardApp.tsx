@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useDarkMode } from '@darkMode/useDarkMode'
 
 interface EventLogEntry {
@@ -7,6 +7,11 @@ interface EventLogEntry {
     payload_type: string
     metadata_type: string
     created: string
+}
+
+interface WorkspaceContext {
+    topic: string
+    name: string
 }
 
 const EVENT_QUERY = `
@@ -23,6 +28,7 @@ const EVENT_QUERY = `
     END AS payload_type,
     metadata_type
   FROM events
+  WHERE topic = ?
   ORDER BY id DESC
   LIMIT 30
 `
@@ -74,33 +80,70 @@ const EventRow: React.FC<{ event: EventLogEntry }> = ({ event }) => {
     )
 }
 
-export const EventPanelApp: React.FC = () => {
+export const ContextDashboardApp: React.FC = () => {
     useDarkMode()
     const [events, setEvents] = useState<EventLogEntry[]>([])
+    const [workspaceContext, setWorkspaceContext] = useState<WorkspaceContext | null>(
+        null
+    )
     const [error, setError] = useState<string | null>(null)
+    const activeTopicRef = useRef<string | null>(null)
+
+    const loadEvents = useCallback(async (topic: string): Promise<void> => {
+        try {
+            const rows = await window.contextDashboardAPI.queryDatabase(EVENT_QUERY, [topic])
+            setEvents(rows)
+            setError(null)
+        } catch (queryError) {
+            setError(
+                queryError instanceof Error
+                    ? queryError.message
+                    : 'Unable to load events'
+            )
+        }
+    }, [])
+
+    const applyWorkspaceContext = useCallback(
+        (context: WorkspaceContext): void => {
+            activeTopicRef.current = context.topic
+            setWorkspaceContext(context)
+            void loadEvents(context.topic)
+        },
+        [loadEvents]
+    )
 
     useEffect(() => {
         let isMounted = true
 
-        window.eventPanelAPI
-            .queryDatabase(EVENT_QUERY)
-            .then((rows) => {
+        window.contextDashboardAPI
+            .getActiveWorkspaceContext()
+            .then((context) => {
                 if (isMounted) {
-                    setEvents(rows)
-                    setError(null)
+                    applyWorkspaceContext(context)
                 }
             })
-            .catch((queryError) => {
+            .catch((contextError) => {
                 if (isMounted) {
                     setError(
-                        queryError instanceof Error
-                            ? queryError.message
-                            : 'Unable to load events'
+                        contextError instanceof Error
+                            ? contextError.message
+                            : 'Unable to load workspace context'
                     )
                 }
             })
 
-        window.eventPanelAPI.onEvent((event) => {
+        window.contextDashboardAPI.onWorkspaceContextUpdated((context) => {
+            if (isMounted) {
+                applyWorkspaceContext(context)
+            }
+        })
+
+        window.contextDashboardAPI.onEvent((event) => {
+            const activeTopic = activeTopicRef.current
+            if (!activeTopic || event.topic !== activeTopic) {
+                return
+            }
+
             setEvents((current) => {
                 if (current.some((row) => row.id === event.id)) {
                     return current
@@ -111,9 +154,10 @@ export const EventPanelApp: React.FC = () => {
 
         return () => {
             isMounted = false
-            window.eventPanelAPI.removeEventListener()
+            window.contextDashboardAPI.removeEventListener()
+            window.contextDashboardAPI.removeWorkspaceContextUpdatedListener()
         }
-    }, [])
+    }, [applyWorkspaceContext])
 
     const content = useMemo(() => {
         if (error) {
@@ -127,7 +171,7 @@ export const EventPanelApp: React.FC = () => {
         if (events.length === 0) {
             return (
                 <div className="px-3 py-4 text-xs text-muted-foreground">
-                    No events logged yet.
+                    No events logged yet for this workspace.
                 </div>
             )
         }
@@ -142,13 +186,15 @@ export const EventPanelApp: React.FC = () => {
     }, [error, events])
 
     return (
-        <div className="flex h-screen min-w-0 flex-col border-r border-border bg-background">
+        <div className="flex h-screen min-w-0 flex-col bg-background">
             <header className="shrink-0 border-b border-border bg-muted/20 px-3 py-2.5">
                 <h1 className="text-xs font-semibold uppercase tracking-wide text-foreground">
                     Event History
                 </h1>
                 <p className="mt-0.5 text-[11px] leading-tight text-muted-foreground">
-                    Recent SQLite event rows
+                    {workspaceContext
+                        ? `Recent events for ${workspaceContext.name}`
+                        : 'Recent workspace events'}
                 </p>
             </header>
             <main className="flex min-h-0 flex-1 flex-col">{content}</main>

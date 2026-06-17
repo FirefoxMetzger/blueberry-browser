@@ -21,6 +21,7 @@ interface WorkspaceSnapshot {
   workspaces: WorkspaceInfo[];
   activeWorkspaceId: string;
   tabs: TabInfo[];
+  contextDashboardVisible: boolean;
 }
 
 interface PopupPoint {
@@ -43,6 +44,7 @@ interface TopBarAPI {
   switchWorkspace: (workspaceId: string) => Promise<boolean>;
   moveTabToWorkspace: (tabId: string, workspaceId: string) => Promise<boolean>;
   openWorkspaceMenu: (point: PopupPoint) => Promise<boolean>;
+  showContextDashboard: () => Promise<boolean>;
   openTabContextMenu: (tabId: string, point: PopupPoint) => Promise<boolean>;
   onWorkspaceStateUpdated: (
     callback: (state: WorkspaceSnapshot) => void,
