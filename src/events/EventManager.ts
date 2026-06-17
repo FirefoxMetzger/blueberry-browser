@@ -4,8 +4,10 @@ import {
   IpcMainEvent,
   IpcMainInvokeEvent,
   Menu,
+  WebContents,
 } from "electron";
 import type { Window } from "../main/Window";
+import type { AgentChatView } from "../agentChat/main";
 import type { WorkspaceManager } from "../workspaces/WorkspaceManager";
 import { DEFAULT_WORKSPACE_TOPIC, workspaceTopic } from "../workspaces/types";
 import { eventDatabase } from "./database";
@@ -589,37 +591,135 @@ export class EventManager {
   }
 
   private handleAgentChatEvents(): void {
-    const activeWorkspaceTopic = (): string => this.getActiveWorkspaceTopic();
     const tabWorkspaceTopic = (tabId: unknown): string =>
       this.getTabWorkspaceTopic(tabId);
 
     this.handle(
       "agent-chat-message",
-      async (_, request: { message: string; messageId: string }) => {
-        const activeChat = this.mainWindow.getActiveAgentChat();
-        if (activeChat) {
-          await activeChat.client.sendChatMessage(request);
+      async (event, request: { message: string; messageId: string }) => {
+        const chat = this.getAgentChatFromSender(event.sender);
+        if (!chat) {
+          return;
         }
+
+        this.ensureAgentChatConfigured(chat);
+
+        const topic =
+          this.workspaceManager.getTabWorkspaceTopic(
+            this.mainWindow.id,
+            chat.id,
+          ) ?? this.getActiveWorkspaceTopic();
+
+        const payload = {
+          tabId: chat.id,
+          message: request.message,
+          messageId: request.messageId,
+        };
+
+        const loggedEvent = eventDatabase.publish(
+          topic,
+          1,
+          payload,
+          "agent-chat-message",
+          { sender: event.sender.id, kind: "invoke" },
+          "rpc-meta",
+        );
+        this.broadcastEvent(loggedEvent);
+
+        await chat.client.sendChatMessage(request, loggedEvent.id);
       },
-      { topic: activeWorkspaceTopic },
+      { skipRpcLog: true },
     );
 
     this.handle(
       "agent-chat-clear-chat",
-      () => {
-        const activeChat = this.mainWindow.getActiveAgentChat();
-        activeChat?.client.clearMessages();
+      (event) => {
+        const chat = this.getAgentChatFromSender(event.sender);
+        if (!chat) {
+          return false;
+        }
+
+        this.ensureAgentChatConfigured(chat);
+        chat.client.clearMessages();
+
+        const topic =
+          this.workspaceManager.getTabWorkspaceTopic(
+            this.mainWindow.id,
+            chat.id,
+          ) ?? this.getActiveWorkspaceTopic();
+
+        const loggedEvent = eventDatabase.publish(
+          topic,
+          1,
+          { tabId: chat.id },
+          "agent-chat-clear-chat",
+          { sender: event.sender.id, kind: "invoke" },
+          "rpc-meta",
+        );
+        this.broadcastEvent(loggedEvent);
+
         return true;
       },
-      { topic: activeWorkspaceTopic },
+      { skipRpcLog: true },
+    );
+
+    this.handle(
+      "agent-chat-get-tab-id",
+      (event) => this.getAgentChatFromSender(event.sender)?.id ?? null,
+      { skipRpcLog: true },
+    );
+
+    this.handle(
+      "agent-chat-get-context",
+      (event) => {
+        const chat = this.getAgentChatFromSender(event.sender);
+        if (!chat) {
+          return null;
+        }
+
+        const topic =
+          this.workspaceManager.getTabWorkspaceTopic(
+            this.mainWindow.id,
+            chat.id,
+          ) ?? this.getActiveWorkspaceTopic();
+
+        return { tabId: chat.id, topic };
+      },
+      { skipRpcLog: true },
     );
 
     this.handle(
       "agent-chat-get-messages",
-      () => {
-        return this.mainWindow.getActiveAgentChat()?.client.getMessages() ?? [];
+      (event) => {
+        const chat = this.getAgentChatFromSender(event.sender);
+        if (!chat) {
+          return [];
+        }
+
+        this.ensureAgentChatConfigured(chat);
+        chat.client.hydrateFromDatabase();
+        return chat.client.getMessages();
       },
-      { topic: tabWorkspaceTopic },
+      { skipRpcLog: true, topic: tabWorkspaceTopic },
+    );
+  }
+
+  private getAgentChatFromSender(sender: WebContents): AgentChatView | null {
+    for (const chat of this.mainWindow.allAgentChats) {
+      if (chat.view.webContents === sender) {
+        return chat;
+      }
+    }
+    return null;
+  }
+
+  private ensureAgentChatConfigured(chat: AgentChatView): void {
+    chat.client.setWorkspaceTopicResolver(
+      () =>
+        this.workspaceManager.getTabWorkspaceTopic(
+          this.mainWindow.id,
+          chat.id,
+        ) ?? this.getActiveWorkspaceTopic(),
     );
   }
 

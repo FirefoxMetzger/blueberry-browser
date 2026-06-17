@@ -30,6 +30,14 @@ export const WORKSPACE_ACTIVITY_QUERY = `
   LIMIT 30
 `;
 
+export const AGENT_CHAT_MESSAGES_QUERY = `
+  SELECT id, payload, payload_type, created
+  FROM events
+  WHERE topic = ?
+    AND payload_type IN ('agent-chat-message', 'agent-chat-clear-chat')
+  ORDER BY id ASC
+`;
+
 export const LATEST_DARK_MODE_EVENT_QUERY = `
   SELECT payload
   FROM events

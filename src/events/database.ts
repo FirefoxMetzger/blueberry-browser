@@ -150,6 +150,14 @@ class EventDatabase {
     return stmt.all(...params) as T[];
   }
 
+  updatePayload(id: number, payload: unknown): void {
+    const db = this.requireDb();
+    db.prepare(`UPDATE events SET payload = ? WHERE id = ?`).run(
+      JSON.stringify(payload),
+      id,
+    );
+  }
+
   private requireDb(): Database.Database {
     if (!this.db) {
       throw new Error("EventDatabase is not initialized. Call init() first.");

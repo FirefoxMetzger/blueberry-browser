@@ -12,11 +12,27 @@ interface ChatResponse {
   isComplete: boolean;
 }
 
+interface WorkspaceContext {
+  topic: string;
+  name: string;
+}
+
 const agentChatAPI = {
   sendChatMessage: (request: ChatRequest) =>
     electronAPI.ipcRenderer.invoke("agent-chat-message", request),
 
   clearChat: () => electronAPI.ipcRenderer.invoke("agent-chat-clear-chat"),
+
+  getTabId: () => electronAPI.ipcRenderer.invoke("agent-chat-get-tab-id"),
+
+  getChatContext: (): Promise<{ tabId: string; topic: string } | null> =>
+    electronAPI.ipcRenderer.invoke("agent-chat-get-context"),
+
+  getActiveWorkspaceContext: (): Promise<WorkspaceContext> =>
+    electronAPI.ipcRenderer.invoke("get-active-workspace-context"),
+
+  queryDatabase: (sql: string, params?: unknown[]) =>
+    electronAPI.ipcRenderer.invoke("db-query", sql, params),
 
   getMessages: () => electronAPI.ipcRenderer.invoke("agent-chat-get-messages"),
 

@@ -475,10 +475,22 @@ export class WorkspaceManager {
 
     this.publishDomainEvent(topic, "tab-activated", { tabId });
 
-    void chat.client.sendChatMessage({
-      message: initialMessage,
-      messageId: Date.now().toString(),
-    });
+    const messageId = Date.now().toString();
+    chat.client.setWorkspaceTopicResolver(() => topic);
+    const chatEvent = eventDatabase.publish(
+      topic,
+      1,
+      { tabId, message: initialMessage, messageId },
+      "agent-chat-message",
+      { kind: "invoke" },
+      "rpc-meta",
+    );
+    this.broadcastEvent(chatEvent);
+
+    void chat.client.sendChatMessage(
+      { message: initialMessage, messageId },
+      chatEvent.id,
+    );
 
     this.notifyStateChanged();
   }

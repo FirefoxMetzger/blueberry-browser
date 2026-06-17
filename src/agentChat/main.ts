@@ -17,7 +17,7 @@ export class AgentChatView {
     this.webContentsView = this.createWebContentsView();
     baseWindow.contentView.addChildView(this.webContentsView);
     this.webContentsView.setVisible(false);
-    this.llmClient = new LLMClient(this.webContentsView.webContents);
+    this.llmClient = new LLMClient(this.webContentsView.webContents, id);
   }
 
   private createWebContentsView(): WebContentsView {

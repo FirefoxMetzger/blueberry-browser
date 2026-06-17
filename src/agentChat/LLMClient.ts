@@ -5,6 +5,13 @@ import { anthropic } from "@ai-sdk/anthropic";
 import * as dotenv from "dotenv";
 import { join } from "path";
 import type { Window } from "../main/Window";
+import { eventDatabase } from "../events/database";
+import { AGENT_CHAT_MESSAGES_QUERY } from "../events/queries";
+import {
+  coreMessagesFromEventRows,
+  type AgentChatEventRow,
+  type AgentChatMessagePayload,
+} from "./chatHistory";
 
 dotenv.config({ path: join(__dirname, "../../.env") });
 
@@ -30,14 +37,17 @@ const DEFAULT_TEMPERATURE = 0.7;
 
 export class LLMClient {
   private readonly webContents: WebContents;
+  private readonly tabId: string;
   private window: Window | null = null;
+  private getWorkspaceTopic: (() => string | null) | null = null;
   private readonly provider: LLMProvider;
   private readonly modelName: string;
   private readonly model: LanguageModel | null;
   private messages: CoreMessage[] = [];
 
-  constructor(webContents: WebContents) {
+  constructor(webContents: WebContents, tabId: string) {
     this.webContents = webContents;
+    this.tabId = tabId;
     this.provider = this.getProvider();
     this.modelName = this.getModelName();
     this.model = this.initializeModel();
@@ -47,6 +57,27 @@ export class LLMClient {
 
   setWindow(window: Window): void {
     this.window = window;
+  }
+
+  setWorkspaceTopicResolver(resolver: () => string | null): void {
+    this.getWorkspaceTopic = resolver;
+  }
+
+  hydrateFromDatabase(excludeEventId?: number): void {
+    const topic = this.getWorkspaceTopic?.();
+    if (!topic) {
+      return;
+    }
+
+    const rows = eventDatabase.query<AgentChatEventRow>(
+      AGENT_CHAT_MESSAGES_QUERY,
+      [topic],
+    );
+    this.messages = coreMessagesFromEventRows(
+      rows,
+      this.tabId,
+      excludeEventId,
+    );
   }
 
   private getProvider(): LLMProvider {
@@ -99,8 +130,14 @@ export class LLMClient {
     }
   }
 
-  async sendChatMessage(request: ChatRequest): Promise<void> {
+  async sendChatMessage(
+    request: ChatRequest,
+    eventId?: number,
+  ): Promise<void> {
     try {
+      if (this.messages.length === 0) {
+        this.hydrateFromDatabase(eventId);
+      }
       let screenshot: string | null = null;
       if (this.window) {
         const activeTab = this.window.activeTab;
@@ -146,10 +183,10 @@ export class LLMClient {
       }
 
       const messages = await this.prepareMessagesWithContext(request);
-      await this.streamResponse(messages, request.messageId);
+      await this.streamResponse(messages, request.messageId, eventId);
     } catch (error) {
       console.error("Error in LLM request:", error);
-      this.handleStreamError(error, request.messageId);
+      this.handleStreamError(error, request.messageId, eventId);
     }
   }
 
@@ -224,6 +261,7 @@ export class LLMClient {
   private async streamResponse(
     messages: CoreMessage[],
     messageId: string,
+    eventId?: number,
   ): Promise<void> {
     if (!this.model) {
       throw new Error("Model not initialized");
@@ -237,12 +275,13 @@ export class LLMClient {
       abortSignal: undefined,
     });
 
-    await this.processStream(result.textStream, messageId);
+    await this.processStream(result.textStream, messageId, eventId);
   }
 
   private async processStream(
     textStream: AsyncIterable<string>,
     messageId: string,
+    eventId?: number,
   ): Promise<void> {
     let accumulatedText = "";
 
@@ -275,17 +314,23 @@ export class LLMClient {
     };
     this.sendMessagesToRenderer();
 
+    this.persistResponse(eventId, messageId, accumulatedText);
+
     this.sendStreamChunk(messageId, {
       content: accumulatedText,
       isComplete: true,
     });
   }
 
-  private handleStreamError(error: unknown, messageId: string): void {
+  private handleStreamError(
+    error: unknown,
+    messageId: string,
+    eventId?: number,
+  ): void {
     console.error("Error streaming from LLM:", error);
 
     const errorMessage = this.getErrorMessage(error);
-    this.sendErrorMessage(messageId, errorMessage);
+    this.sendErrorMessage(messageId, errorMessage, eventId);
   }
 
   private getErrorMessage(error: unknown): string {
@@ -318,11 +363,47 @@ export class LLMClient {
     return "Sorry, I encountered an error while processing your request. Please try again.";
   }
 
-  private sendErrorMessage(messageId: string, errorMessage: string): void {
+  private sendErrorMessage(
+    messageId: string,
+    errorMessage: string,
+    eventId?: number,
+  ): void {
+    this.persistResponse(eventId, messageId, errorMessage);
     this.sendStreamChunk(messageId, {
       content: errorMessage,
       isComplete: true,
     });
+  }
+
+  private persistResponse(
+    eventId: number | undefined,
+    messageId: string,
+    response: string,
+  ): void {
+    if (eventId === undefined) {
+      return;
+    }
+
+    const rows = eventDatabase.query<{ payload: string }>(
+      "SELECT payload FROM events WHERE id = ?",
+      [eventId],
+    );
+    const existing = rows[0]?.payload;
+    if (!existing) {
+      return;
+    }
+
+    try {
+      const parsed = JSON.parse(existing) as AgentChatMessagePayload;
+      eventDatabase.updatePayload(eventId, {
+        ...parsed,
+        tabId: parsed.tabId || this.tabId,
+        messageId: parsed.messageId || messageId,
+        response,
+      });
+    } catch (error) {
+      console.error("Failed to persist agent chat response:", error);
+    }
   }
 
   private sendStreamChunk(messageId: string, chunk: StreamChunk): void {

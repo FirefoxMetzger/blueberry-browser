@@ -1,4 +1,10 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react'
+import { AGENT_CHAT_MESSAGES_QUERY } from '../../../../events/queries'
+import {
+    chatMessagesFromEventRows,
+    type AgentChatEventRow,
+    type StoredChatMessage,
+} from '../../../chatHistory'
 
 interface Message {
     id: string
@@ -23,6 +29,14 @@ interface ChatContextType {
 
 const ChatContext = createContext<ChatContextType | null>(null)
 
+const toDisplayMessage = (message: StoredChatMessage): Message => ({
+    id: message.id,
+    role: message.role,
+    content: message.content,
+    timestamp: message.timestamp,
+    isStreaming: false,
+})
+
 export const useChat = () => {
     const context = useContext(ChatContext)
     if (!context) {
@@ -35,30 +49,33 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const [messages, setMessages] = useState<Message[]>([])
     const [isLoading, setIsLoading] = useState(false)
 
-    // Load initial messages from main process
-    useEffect(() => {
-        const loadMessages = async () => {
-            try {
-                const storedMessages = await window.agentChatAPI.getMessages()
-                if (storedMessages && storedMessages.length > 0) {
-                    // Convert CoreMessage format to our frontend Message format
-                    const convertedMessages = storedMessages.map((msg: any, index: number) => ({
-                        id: `msg-${index}`,
-                        role: msg.role,
-                        content: typeof msg.content === 'string' 
-                            ? msg.content 
-                            : msg.content.find((p: any) => p.type === 'text')?.text || '',
-                        timestamp: Date.now(),
-                        isStreaming: false
-                    }))
-                    setMessages(convertedMessages)
-                }
-            } catch (error) {
-                console.error('Failed to load messages:', error)
+    const loadMessagesFromEventLog = useCallback(async (): Promise<void> => {
+        try {
+            const chatContext = await window.agentChatAPI.getChatContext()
+            if (!chatContext) {
+                return
             }
+
+            const rows = await window.agentChatAPI.queryDatabase(
+                AGENT_CHAT_MESSAGES_QUERY,
+                [chatContext.topic]
+            )
+
+            const storedMessages = chatMessagesFromEventRows(
+                rows as AgentChatEventRow[],
+                chatContext.tabId
+            )
+
+            setMessages(storedMessages.map(toDisplayMessage))
+        } catch (error) {
+            console.error('Failed to load messages:', error)
         }
-        loadMessages()
     }, [])
+
+    // Load conversation history from the event log
+    useEffect(() => {
+        void loadMessagesFromEventLog()
+    }, [loadMessagesFromEventLog])
 
     const sendMessage = useCallback(async (content: string) => {
         setIsLoading(true)
@@ -118,7 +135,6 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         // Listen for message updates from main process
         const handleMessagesUpdated = (updatedMessages: any[]) => {
-            // Convert CoreMessage format to our frontend Message format
             const convertedMessages = updatedMessages.map((msg: any, index: number) => ({
                 id: `msg-${index}`,
                 role: msg.role,

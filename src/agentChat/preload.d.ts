@@ -18,9 +18,23 @@ interface TabInfo {
   isActive: boolean;
 }
 
+interface WorkspaceContext {
+  topic: string;
+  name: string;
+}
+
+interface AgentChatContext {
+  tabId: string;
+  topic: string;
+}
+
 interface AgentChatAPI {
   sendChatMessage: (request: ChatRequest) => Promise<void>;
   clearChat: () => Promise<boolean>;
+  getTabId: () => Promise<string | null>;
+  getChatContext: () => Promise<AgentChatContext | null>;
+  getActiveWorkspaceContext: () => Promise<WorkspaceContext>;
+  queryDatabase: (sql: string, params?: unknown[]) => Promise<unknown[]>;
   getMessages: () => Promise<unknown[]>;
   onChatResponse: (callback: (data: ChatResponse) => void) => void;
   onMessagesUpdated: (callback: (messages: unknown[]) => void) => void;
