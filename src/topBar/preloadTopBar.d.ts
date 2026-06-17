@@ -5,7 +5,7 @@ interface TabInfo {
   title: string;
   url: string;
   isActive: boolean;
-  workspaceId?: string;
+  workspaceId: string;
 }
 
 interface WorkspaceInfo {
@@ -29,9 +29,7 @@ interface PopupPoint {
 }
 
 interface TopBarAPI {
-  createTab: (
-    url?: string,
-  ) => Promise<{ id: string; title: string; url: string } | null>;
+  createTab: (url?: string) => Promise<TabInfo | null>;
   closeTab: (tabId: string) => Promise<boolean>;
   switchTab: (tabId: string) => Promise<boolean>;
   getTabs: () => Promise<TabInfo[]>;

@@ -1,18 +1,9 @@
-import type { Event } from "../events/types";
+import type { Event, WorkspaceEventPayloads } from "../events/types";
 import {
   DEFAULT_WORKSPACE_ID,
   DEFAULT_WORKSPACE_TOPIC,
-  parseWorkspaceTopic,
+  parseLegacyWorkspaceTopic,
   type GlobalWorkspaceProjection,
-  type TabActivatedPayload,
-  type TabClosedPayload,
-  type TabCreatedPayload,
-  type TabMovedPayload,
-  type TabTitleChangedPayload,
-  type TabUrlChangedPayload,
-  type WorkspaceCreatedPayload,
-  type WorkspaceRemovedPayload,
-  type WorkspaceRenamedPayload,
   type WorkspaceState,
   workspaceTopic,
 } from "./types";
@@ -33,11 +24,16 @@ function createEmptyWorkspaceState(
 }
 
 export function createEmptyProjection(): GlobalWorkspaceProjection {
-  return {
-    workspaces: new Map(),
-    defaultWorkspaceTabs: new Map(),
-    defaultLastActiveTabId: null,
-  };
+  const workspaces = new Map<string, WorkspaceState>();
+  workspaces.set(
+    DEFAULT_WORKSPACE_ID,
+    createEmptyWorkspaceState(
+      DEFAULT_WORKSPACE_ID,
+      "Default",
+      DEFAULT_WORKSPACE_TOPIC,
+    ),
+  );
+  return { workspaces };
 }
 
 function addTabToWorkspace(
@@ -53,7 +49,6 @@ function addTabToWorkspace(
     id: tabId,
     title,
     url,
-    workspaceId: state.id,
   });
 }
 
@@ -75,7 +70,8 @@ function applyWorkspaceEvent(
 ): void {
   switch (payloadType) {
     case "workspace-created": {
-      const { workspaceId, name } = payload as WorkspaceCreatedPayload;
+      const { workspaceId, name } =
+        payload as WorkspaceEventPayloads["workspace-created"];
       if (!projection.workspaces.has(workspaceId)) {
         projection.workspaces.set(
           workspaceId,
@@ -85,7 +81,8 @@ function applyWorkspaceEvent(
       break;
     }
     case "workspace-renamed": {
-      const { workspaceId, name } = payload as WorkspaceRenamedPayload;
+      const { workspaceId, name } =
+        payload as WorkspaceEventPayloads["workspace-renamed"];
       const workspace = projection.workspaces.get(workspaceId);
       if (workspace) {
         workspace.name = name;
@@ -94,8 +91,11 @@ function applyWorkspaceEvent(
       break;
     }
     case "workspace-removed": {
-      const { workspaceId } = payload as WorkspaceRemovedPayload;
-      projection.workspaces.delete(workspaceId);
+      const { workspaceId } =
+        payload as WorkspaceEventPayloads["workspace-removed"];
+      if (workspaceId !== DEFAULT_WORKSPACE_ID) {
+        projection.workspaces.delete(workspaceId);
+      }
       break;
     }
     default:
@@ -113,7 +113,7 @@ function getWorkspaceByTopic(
     }
   }
 
-  const legacyWorkspaceId = parseWorkspaceTopic(topic);
+  const legacyWorkspaceId = parseLegacyWorkspaceTopic(topic);
   return legacyWorkspaceId
     ? projection.workspaces.get(legacyWorkspaceId)
     : undefined;
@@ -126,18 +126,20 @@ function applyTabEventToWorkspace(
 ): void {
   switch (payloadType) {
     case "tab-created": {
-      const { tabId, url, title } = payload as TabCreatedPayload;
+      const { tabId, url, title } =
+        payload as WorkspaceEventPayloads["tab-created"];
       addTabToWorkspace(state, tabId, url, title ?? "New Tab");
       state.lastActiveTabId = tabId;
       break;
     }
     case "tab-closed": {
-      const { tabId } = payload as TabClosedPayload;
+      const { tabId } = payload as WorkspaceEventPayloads["tab-closed"];
       removeTabFromWorkspace(state, tabId);
       break;
     }
     case "tab-url-changed": {
-      const { tabId, url } = payload as TabUrlChangedPayload;
+      const { tabId, url } =
+        payload as WorkspaceEventPayloads["tab-url-changed"];
       const tab = state.tabs.get(tabId);
       if (tab) {
         tab.url = url;
@@ -145,7 +147,8 @@ function applyTabEventToWorkspace(
       break;
     }
     case "tab-title-changed": {
-      const { tabId, title } = payload as TabTitleChangedPayload;
+      const { tabId, title } =
+        payload as WorkspaceEventPayloads["tab-title-changed"];
       const tab = state.tabs.get(tabId);
       if (tab) {
         tab.title = title;
@@ -153,86 +156,19 @@ function applyTabEventToWorkspace(
       break;
     }
     case "tab-activated": {
-      const { tabId } = payload as TabActivatedPayload;
+      const { tabId } = payload as WorkspaceEventPayloads["tab-activated"];
       if (state.tabs.has(tabId)) {
         state.lastActiveTabId = tabId;
       }
       break;
     }
     case "tab-moved": {
-      const move = payload as TabMovedPayload;
+      const move = payload as WorkspaceEventPayloads["tab-moved"];
       if (move.direction === "out") {
         removeTabFromWorkspace(state, move.tabId);
       } else {
         addTabToWorkspace(state, move.tabId, move.url, move.title);
         state.lastActiveTabId = move.tabId;
-      }
-      break;
-    }
-    default:
-      break;
-  }
-}
-
-function applyDefaultTabEvent(
-  projection: GlobalWorkspaceProjection,
-  payloadType: string,
-  payload: unknown,
-): void {
-  switch (payloadType) {
-    case "tab-created": {
-      const { tabId, url, title } = payload as TabCreatedPayload;
-      projection.defaultWorkspaceTabs.set(tabId, {
-        id: tabId,
-        title: title ?? "New Tab",
-        url,
-        workspaceId: DEFAULT_WORKSPACE_ID,
-      });
-      projection.defaultLastActiveTabId = tabId;
-      break;
-    }
-    case "tab-closed": {
-      const { tabId } = payload as TabClosedPayload;
-      projection.defaultWorkspaceTabs.delete(tabId);
-      if (projection.defaultLastActiveTabId === tabId) {
-        const remaining = Array.from(projection.defaultWorkspaceTabs.keys());
-        projection.defaultLastActiveTabId =
-          remaining.length > 0 ? remaining[remaining.length - 1] : null;
-      }
-      break;
-    }
-    case "tab-url-changed": {
-      const { tabId, url } = payload as TabUrlChangedPayload;
-      const tab = projection.defaultWorkspaceTabs.get(tabId);
-      if (tab) {
-        tab.url = url;
-      }
-      break;
-    }
-    case "tab-title-changed": {
-      const { tabId, title } = payload as TabTitleChangedPayload;
-      const tab = projection.defaultWorkspaceTabs.get(tabId);
-      if (tab) {
-        tab.title = title;
-      }
-      break;
-    }
-    case "tab-activated": {
-      const { tabId } = payload as TabActivatedPayload;
-      if (projection.defaultWorkspaceTabs.has(tabId)) {
-        projection.defaultLastActiveTabId = tabId;
-      }
-      break;
-    }
-    case "tab-moved": {
-      const move = payload as TabMovedPayload;
-      if (move.direction === "out") {
-        projection.defaultWorkspaceTabs.delete(move.tabId);
-        if (projection.defaultLastActiveTabId === move.tabId) {
-          const remaining = Array.from(projection.defaultWorkspaceTabs.keys());
-          projection.defaultLastActiveTabId =
-            remaining.length > 0 ? remaining[remaining.length - 1] : null;
-        }
       }
       break;
     }
@@ -256,18 +192,17 @@ export function applyEventRow(
     return;
   }
 
-  if (topic === DEFAULT_WORKSPACE_TOPIC) {
-    applyDefaultTabEvent(projection, payloadType, payload);
+  if (payloadType === "workspace-switched") {
     return;
   }
 
-  if (!parseWorkspaceTopic(topic)) {
+  if (!topic) {
     return;
   }
 
   let workspace = getWorkspaceByTopic(projection, topic);
   if (!workspace && payloadType === "tab-moved") {
-    const move = payload as TabMovedPayload;
+    const move = payload as WorkspaceEventPayloads["tab-moved"];
     if (move.direction === "in") {
       workspace = createEmptyWorkspaceState(
         move.toWorkspaceId,
@@ -291,14 +226,4 @@ export function replayProjection(
     applyEventRow(projection, row);
   }
   return projection;
-}
-
-export function getNamedWorkspaceProjection(
-  projection: GlobalWorkspaceProjection,
-): GlobalWorkspaceProjection {
-  return {
-    workspaces: new Map(projection.workspaces),
-    defaultWorkspaceTabs: new Map(),
-    defaultLastActiveTabId: null,
-  };
 }

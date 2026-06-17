@@ -4,8 +4,8 @@ import {
   WebContents,
 } from "electron";
 import type { Window } from "../main/Window";
-import type { EventManager } from "../main/events/EventManager";
-import { eventDatabase } from "../main/events/database";
+import type { EventManager } from "../events/EventManager";
+import { eventDatabase } from "../events/database";
 import {
   DARK_MODE_CHANGED_TOPIC,
   DARK_MODE_UPDATED_TOPIC,

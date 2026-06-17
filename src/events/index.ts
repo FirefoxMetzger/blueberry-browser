@@ -1,2 +1,6 @@
 export { eventDatabase } from "./database";
-export type { Event } from "./types";
+export type {
+  Event,
+  WorkspaceEventPayloads,
+  WorkspacePayloadType,
+} from "./types";

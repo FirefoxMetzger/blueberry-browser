@@ -11,7 +11,7 @@ interface TabInfo {
   title: string;
   url: string;
   isActive: boolean;
-  workspaceId?: string;
+  workspaceId: string;
 }
 
 interface WorkspaceInfo {

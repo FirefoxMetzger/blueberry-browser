@@ -4,7 +4,7 @@ import { Tab } from "./Tab";
 import { TopBar } from "../topBar/mainTopBar";
 import { SideBar } from "../sideBar/mainSideBar";
 import { EventPanel, EVENT_PANEL_WIDTH } from "../eventPanel/mainEventPanel";
-import type { TabHistorySnapshot } from "./workspaces/types";
+import type { TabHistorySnapshot } from "../workspaces/types";
 
 export type TabStateCallback = (
   tabId: string,
@@ -83,10 +83,6 @@ export class Window {
 
   get tabCount(): number {
     return this.tabsMap.size;
-  }
-
-  getMaterializedTabIds(): string[] {
-    return Array.from(this.tabsMap.keys());
   }
 
   getTabRecordUrl(tabId: string): string | undefined {
@@ -184,10 +180,6 @@ export class Window {
         materialize(tabId, getUrl(tabId) ?? "https://www.google.com");
       }
     }
-  }
-
-  closeTab(tabId: string): boolean {
-    return this.destroyTabView(tabId);
   }
 
   switchActiveTab(tabId: string): boolean {

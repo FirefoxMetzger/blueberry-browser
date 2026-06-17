@@ -5,7 +5,7 @@ import {
   IpcMainInvokeEvent,
   Menu,
 } from "electron";
-import type { Window } from "../Window";
+import type { Window } from "../main/Window";
 import type { WorkspaceManager } from "../workspaces/WorkspaceManager";
 import { DEFAULT_WORKSPACE_TOPIC, workspaceTopic } from "../workspaces/types";
 import { eventDatabase } from "./database";

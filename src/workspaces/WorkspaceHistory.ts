@@ -1,19 +1,8 @@
-import type { Event } from "../events/types";
-import type {
-  GlobalWorkspaceProjection,
-  TabCreatedPayload,
-  TabHistorySnapshot,
-  TabTitleChangedPayload,
-  TabUrlChangedPayload,
-} from "./types";
+import type { Event, WorkspaceEventPayloads } from "../events/types";
+import type { GlobalWorkspaceProjection, TabHistorySnapshot } from "./types";
 
 type HistoryEventRow = Pick<Event, "payload_type" | "payload">;
 type NavigationDirection = -1 | 1;
-
-interface TabHistoryState {
-  entries: Electron.NavigationEntry[];
-  index: number;
-}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
@@ -42,7 +31,7 @@ function createNavigationEntry(
 }
 
 export class TabHistoryAggregator {
-  private histories = new Map<string, TabHistoryState>();
+  private histories = new Map<string, TabHistorySnapshot>();
   private pendingDirections = new Map<string, NavigationDirection>();
   private activeTabId: string | null = null;
 
@@ -55,7 +44,8 @@ export class TabHistoryAggregator {
   apply(row: HistoryEventRow): void {
     switch (row.payload_type) {
       case "tab-created": {
-        const { tabId, url, title } = row.payload as TabCreatedPayload;
+        const { tabId, url, title } =
+          row.payload as WorkspaceEventPayloads["tab-created"];
         this.histories.set(tabId, {
           entries: [createNavigationEntry(url, title ?? "New Tab")],
           index: 0,
@@ -92,12 +82,14 @@ export class TabHistoryAggregator {
         break;
       }
       case "tab-url-changed": {
-        const { tabId, url } = row.payload as TabUrlChangedPayload;
+        const { tabId, url } =
+          row.payload as WorkspaceEventPayloads["tab-url-changed"];
         this.applyUrlChange(tabId, url);
         break;
       }
       case "tab-title-changed": {
-        const { tabId, title } = row.payload as TabTitleChangedPayload;
+        const { tabId, title } =
+          row.payload as WorkspaceEventPayloads["tab-title-changed"];
         this.applyTitleChange(tabId, title);
         break;
       }
@@ -119,10 +111,6 @@ export class TabHistoryAggregator {
   }
 
   hydrateProjection(projection: GlobalWorkspaceProjection): void {
-    for (const [tabId, tab] of projection.defaultWorkspaceTabs) {
-      tab.history = this.getHistory(tabId);
-    }
-
     for (const workspace of projection.workspaces.values()) {
       for (const [tabId, tab] of workspace.tabs) {
         tab.history = this.getHistory(tabId);
@@ -177,7 +165,7 @@ export class TabHistoryAggregator {
     }
   }
 
-  private ensureHistory(tabId: string, url: string): TabHistoryState {
+  private ensureHistory(tabId: string, url: string): TabHistorySnapshot {
     let history = this.histories.get(tabId);
     if (!history) {
       history = {

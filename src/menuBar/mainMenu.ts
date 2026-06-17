@@ -1,6 +1,6 @@
 import { Menu, app } from "electron";
 import type { Window } from "../main/Window";
-import type { WorkspaceManager } from "../main/workspaces/WorkspaceManager";
+import type { WorkspaceManager } from "../workspaces/WorkspaceManager";
 
 export type MenuEventPublisher = (channel: string, args?: unknown[]) => void;
 

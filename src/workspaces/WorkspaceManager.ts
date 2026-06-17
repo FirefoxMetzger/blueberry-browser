@@ -1,6 +1,10 @@
-import type { Event } from "../events/types";
+import type {
+  Event,
+  WorkspaceEventPayloads,
+  WorkspacePayloadType,
+} from "../events/types";
 import { eventDatabase } from "../events/database";
-import type { Window } from "../Window";
+import type { Window } from "../main/Window";
 import { applyEventRow, replayProjection } from "./WorkspaceProjection";
 import { TabHistoryAggregator } from "./WorkspaceHistory";
 import {
@@ -8,12 +12,12 @@ import {
   createTabId,
   createWorkspaceId,
   DEFAULT_WORKSPACE_ID,
-  DEFAULT_WORKSPACE_TOPIC,
   type GlobalWorkspaceProjection,
+  type TabRecord,
   type TabSnapshot,
   type WorkspaceInfo,
   type WorkspaceSnapshot,
-  type WorkspaceTabRecord,
+  type WorkspaceState,
   workspaceTopic,
 } from "./types";
 
@@ -21,7 +25,7 @@ const WORKSPACE_EVENTS_QUERY = `
   SELECT topic, payload_type, payload
   FROM events
   WHERE topic = 'default'
-     OR topic LIKE 'workspace:%'
+     OR metadata_type = 'workspace-meta'
   ORDER BY id ASC
 `;
 
@@ -80,11 +84,11 @@ export class WorkspaceManager {
     }
   }
 
-  private publishDomainEvent<P>(
+  private publishDomainEvent<K extends WorkspacePayloadType>(
     topic: string,
-    payloadType: string,
-    payload: P,
-  ): Event<P, typeof DOMAIN_METADATA> {
+    payloadType: K,
+    payload: WorkspaceEventPayloads[K],
+  ): Event<WorkspaceEventPayloads[K], typeof DOMAIN_METADATA> {
     const event = eventDatabase.publish(
       topic,
       1,
@@ -100,9 +104,13 @@ export class WorkspaceManager {
     return event;
   }
 
-  private publishDomainEvents<P>(
-    entries: { topic: string; payloadType: string; payload: P }[],
-  ): Event<P, typeof DOMAIN_METADATA>[] {
+  private publishDomainEvents<K extends WorkspacePayloadType>(
+    entries: {
+      topic: string;
+      payloadType: K;
+      payload: WorkspaceEventPayloads[K];
+    }[],
+  ): Event<WorkspaceEventPayloads[K], typeof DOMAIN_METADATA>[] {
     const events = eventDatabase.publishMany(
       entries.map((entry) => ({
         topic: entry.topic,
@@ -129,7 +137,10 @@ export class WorkspaceManager {
     const windowId = window.id;
     this.windows.set(windowId, window);
     this.windowWorkspaceSelection.set(windowId, DEFAULT_WORKSPACE_ID);
-    if (this.projection.defaultWorkspaceTabs.size === 0) {
+
+    const defaultWorkspace =
+      this.projection.workspaces.get(DEFAULT_WORKSPACE_ID);
+    if (!defaultWorkspace || defaultWorkspace.tabOrder.length === 0) {
       this.createTab(windowId, "https://www.google.com");
     } else {
       this.switchWorkspace(windowId, DEFAULT_WORKSPACE_ID);
@@ -149,27 +160,20 @@ export class WorkspaceManager {
   getWorkspaces(windowId: string): WorkspaceInfo[] {
     const activeWorkspaceId = this.getSelectedWorkspaceId(windowId);
 
-    const defaultInfo: WorkspaceInfo = {
-      id: DEFAULT_WORKSPACE_ID,
-      name: "Default",
-      topic: DEFAULT_WORKSPACE_TOPIC,
-      tabCount: this.getWorkspaceTabIds(DEFAULT_WORKSPACE_ID).length,
-      isDefault: true,
-      isActive: activeWorkspaceId === DEFAULT_WORKSPACE_ID,
-    };
-
-    const named = Array.from(this.projection.workspaces.values()).map(
-      (workspace) => ({
+    return Array.from(this.projection.workspaces.values())
+      .sort((a, b) => {
+        if (a.id === DEFAULT_WORKSPACE_ID) return -1;
+        if (b.id === DEFAULT_WORKSPACE_ID) return 1;
+        return a.name.localeCompare(b.name);
+      })
+      .map((workspace) => ({
         id: workspace.id,
         name: workspace.name,
         topic: workspace.topic,
         tabCount: workspace.tabOrder.length,
-        isDefault: false,
+        isDefault: workspace.id === DEFAULT_WORKSPACE_ID,
         isActive: workspace.id === activeWorkspaceId,
-      }),
-    );
-
-    return [defaultInfo, ...named];
+      }));
   }
 
   getSnapshot(windowId: string): WorkspaceSnapshot {
@@ -191,13 +195,12 @@ export class WorkspaceManager {
     };
   }
 
-  private getWorkspaceTabIds(workspaceId: string): string[] {
-    if (workspaceId === DEFAULT_WORKSPACE_ID) {
-      return Array.from(this.projection.defaultWorkspaceTabs.keys());
-    }
+  private getWorkspaceState(workspaceId: string): WorkspaceState | undefined {
+    return this.projection.workspaces.get(workspaceId);
+  }
 
-    const workspace = this.projection.workspaces.get(workspaceId);
-    return workspace?.tabOrder ?? [];
+  private getWorkspaceTabIds(workspaceId: string): string[] {
+    return this.getWorkspaceState(workspaceId)?.tabOrder ?? [];
   }
 
   private getTabsForWorkspace(
@@ -205,26 +208,8 @@ export class WorkspaceManager {
     windowId: string,
   ): TabSnapshot[] {
     const window = this.windows.get(windowId);
-    if (!window) {
-      return [];
-    }
-
-    if (workspaceId === DEFAULT_WORKSPACE_ID) {
-      return this.getWorkspaceTabIds(workspaceId).map((tabId) => {
-        const materialized = window.getTab(tabId);
-        const record = this.projection.defaultWorkspaceTabs.get(tabId);
-        return {
-          id: tabId,
-          title: materialized?.title ?? record?.title ?? "New Tab",
-          url: materialized?.url ?? record?.url ?? "https://www.google.com",
-          isActive: false,
-          workspaceId: DEFAULT_WORKSPACE_ID,
-        };
-      });
-    }
-
-    const workspace = this.projection.workspaces.get(workspaceId);
-    if (!workspace) {
+    const workspace = this.getWorkspaceState(workspaceId);
+    if (!window || !workspace) {
       return [];
     }
 
@@ -242,11 +227,7 @@ export class WorkspaceManager {
   }
 
   getWorkspaceTopic(workspaceId: string): string {
-    if (workspaceId === DEFAULT_WORKSPACE_ID) {
-      return DEFAULT_WORKSPACE_TOPIC;
-    }
-
-    const workspace = this.projection.workspaces.get(workspaceId);
+    const workspace = this.getWorkspaceState(workspaceId);
     return workspace?.topic ?? workspaceTopic(workspaceId);
   }
 
@@ -260,10 +241,6 @@ export class WorkspaceManager {
       if (workspace.tabs.has(tabId)) {
         return workspaceId;
       }
-    }
-
-    if (this.projection.defaultWorkspaceTabs.has(tabId)) {
-      return DEFAULT_WORKSPACE_ID;
     }
 
     const window = this.windows.get(windowId);
@@ -293,13 +270,9 @@ export class WorkspaceManager {
       title: "New Tab",
     });
 
-    window.materializeTab(
-      tabId,
-      url,
-      (changedTabId, title, changedUrl) => {
-        this.handleTabStateChanged(windowId, changedTabId, title, changedUrl);
-      },
-    );
+    window.materializeTab(tabId, url, (changedTabId, title, changedUrl) => {
+      this.handleTabStateChanged(windowId, changedTabId, title, changedUrl);
+    });
     window.switchActiveTab(tabId);
 
     return {
@@ -382,10 +355,7 @@ export class WorkspaceManager {
   }
 
   switchWorkspace(windowId: string, workspaceId: string): boolean {
-    if (
-      workspaceId !== DEFAULT_WORKSPACE_ID &&
-      !this.projection.workspaces.has(workspaceId)
-    ) {
+    if (!this.projection.workspaces.has(workspaceId)) {
       return false;
     }
 
@@ -427,20 +397,11 @@ export class WorkspaceManager {
         this.getTabRecord(workspaceId, tabId)?.url,
     );
 
-    let targetTabId: string | null = null;
-    if (workspaceId === DEFAULT_WORKSPACE_ID) {
-      targetTabId =
-        this.projection.defaultLastActiveTabId &&
-        tabIds.includes(this.projection.defaultLastActiveTabId)
-          ? this.projection.defaultLastActiveTabId
-          : (tabIds[0] ?? null);
-    } else {
-      const workspace = this.projection.workspaces.get(workspaceId);
-      targetTabId =
-        workspace?.lastActiveTabId && tabIds.includes(workspace.lastActiveTabId)
-          ? workspace.lastActiveTabId
-          : (tabIds[0] ?? null);
-    }
+    const workspace = this.getWorkspaceState(workspaceId);
+    const targetTabId =
+      workspace?.lastActiveTabId && tabIds.includes(workspace.lastActiveTabId)
+        ? workspace.lastActiveTabId
+        : (tabIds[0] ?? null);
 
     if (targetTabId) {
       this.switchTab(windowId, targetTabId);
@@ -619,10 +580,7 @@ export class WorkspaceManager {
   private getTabRecord(
     workspaceId: string,
     tabId: string,
-  ): WorkspaceTabRecord | null | undefined {
-    if (workspaceId === DEFAULT_WORKSPACE_ID) {
-      return this.projection.defaultWorkspaceTabs.get(tabId) ?? null;
-    }
+  ): TabRecord | null | undefined {
     return this.projection.workspaces.get(workspaceId)?.tabs.get(tabId) ?? null;
   }
 
@@ -700,9 +658,5 @@ export class WorkspaceManager {
     }
 
     this.notifyStateChanged();
-  }
-
-  getWindow(windowId: string): Window | undefined {
-    return this.windows.get(windowId);
   }
 }

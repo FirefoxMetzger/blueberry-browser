@@ -1,6 +1,6 @@
 import { NativeImage, WebContentsView } from "electron";
 import type { TabStateCallback } from "./Window";
-import type { TabHistorySnapshot } from "./workspaces/types";
+import type { TabHistorySnapshot } from "../workspaces/types";
 
 export class Tab {
   private webContentsView: WebContentsView;
