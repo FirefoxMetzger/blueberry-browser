@@ -39,7 +39,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     useEffect(() => {
         const loadMessages = async () => {
             try {
-                const storedMessages = await window.sidebarAPI.getMessages()
+                const storedMessages = await window.agentChatAPI.getMessages()
                 if (storedMessages && storedMessages.length > 0) {
                     // Convert CoreMessage format to our frontend Message format
                     const convertedMessages = storedMessages.map((msg: any, index: number) => ({
@@ -67,7 +67,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
             const messageId = Date.now().toString()
 
             // Send message to main process (which will handle context)
-            await window.sidebarAPI.sendChatMessage({
+            await window.agentChatAPI.sendChatMessage({
                 message: content,
                 messageId: messageId
             })
@@ -82,7 +82,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const clearChat = useCallback(async () => {
         try {
-            await window.sidebarAPI.clearChat()
+            await window.agentChatAPI.clearChat()
             setMessages([])
         } catch (error) {
             console.error('Failed to clear chat:', error)
@@ -91,7 +91,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const getPageText = useCallback(async () => {
         try {
-            return await window.sidebarAPI.getPageText()
+            return await window.agentChatAPI.getPageText()
         } catch (error) {
             console.error('Failed to get page text:', error)
             return null
@@ -100,7 +100,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const getCurrentUrl = useCallback(async () => {
         try {
-            return await window.sidebarAPI.getCurrentUrl()
+            return await window.agentChatAPI.getCurrentUrl()
         } catch (error) {
             console.error('Failed to get current URL:', error)
             return null
@@ -131,12 +131,12 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
             setMessages(convertedMessages)
         }
 
-        window.sidebarAPI.onChatResponse(handleChatResponse)
-        window.sidebarAPI.onMessagesUpdated(handleMessagesUpdated)
+        window.agentChatAPI.onChatResponse(handleChatResponse)
+        window.agentChatAPI.onMessagesUpdated(handleMessagesUpdated)
 
         return () => {
-            window.sidebarAPI.removeChatResponseListener()
-            window.sidebarAPI.removeMessagesUpdatedListener()
+            window.agentChatAPI.removeChatResponseListener()
+            window.agentChatAPI.removeMessagesUpdatedListener()
         }
     }, [])
 

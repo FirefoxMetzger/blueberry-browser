@@ -4,6 +4,7 @@ interface TabInfo {
   id: string;
   title: string;
   url: string;
+  kind: "browser" | "agent-chat" | "pending";
   isActive: boolean;
   workspaceId: string;
 }
@@ -30,7 +31,7 @@ interface PopupPoint {
 }
 
 interface TopBarAPI {
-  createTab: (url?: string) => Promise<TabInfo | null>;
+  createTab: () => Promise<TabInfo | null>;
   closeTab: (tabId: string) => Promise<boolean>;
   switchTab: (tabId: string) => Promise<boolean>;
   getTabs: () => Promise<TabInfo[]>;
@@ -61,7 +62,7 @@ interface TopBarAPI {
   tabScreenshot: (tabId: string) => Promise<string | null>;
   tabRunJs: (tabId: string, code: string) => Promise<unknown>;
 
-  toggleSidebar: () => Promise<void>;
+  submitAddressBar: (tabId: string, input: string) => Promise<boolean>;
 }
 
 declare global {

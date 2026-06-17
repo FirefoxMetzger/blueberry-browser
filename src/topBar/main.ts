@@ -1,7 +1,7 @@
 import { is } from "@electron-toolkit/utils";
 import { BaseWindow, WebContentsView } from "electron";
 import { join } from "path";
-import { TOPBAR_BASE_HEIGHT } from "../main/layout";
+import { TOPBAR_BASE_HEIGHT } from "./layout";
 
 export class TopBar {
   private webContentsView: WebContentsView;

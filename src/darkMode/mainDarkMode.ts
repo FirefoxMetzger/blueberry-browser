@@ -56,7 +56,7 @@ export class DarkModeManager {
     const recipients = [
       this.mainWindow.topBar.view.webContents,
       this.mainWindow.contextDashboard.view.webContents,
-      this.mainWindow.sidebar.view.webContents,
+      ...this.mainWindow.allAgentChats.map((chat) => chat.view.webContents),
       ...this.mainWindow.allTabs.map((tab) => tab.webContents),
     ];
 

@@ -48,7 +48,7 @@ export class EventManager {
   private setupEventHandlers(): void {
     this.handleTabEvents();
     this.handleWorkspaceEvents();
-    this.handleSidebarEvents();
+    this.handleAgentChatEvents();
     this.handlePageContentEvents();
 
     ipcMain.handle("db-query", (_e, sql: string, params?: unknown) => {
@@ -190,7 +190,9 @@ export class EventManager {
   public broadcastEvent(event: Event): void {
     this.mainWindow.topBar.view.webContents.send("event-logged", event);
     this.mainWindow.contextDashboard.view.webContents.send("event-logged", event);
-    this.mainWindow.sidebar.view.webContents.send("event-logged", event);
+    for (const chat of this.mainWindow.allAgentChats) {
+      chat.view.webContents.send("event-logged", event);
+    }
   }
 
   public broadcastWorkspaceState(window?: Window): void {
@@ -225,11 +227,8 @@ export class EventManager {
 
     this.handle(
       "create-tab",
-      (_, url?: string) => {
-        return this.workspaceManager.createTab(
-          windowId(),
-          url ?? "https://www.google.com",
-        );
+      () => {
+        return this.workspaceManager.createTab(windowId());
       },
       { topic: activeWorkspaceTopic },
     );
@@ -256,6 +255,14 @@ export class EventManager {
         return this.workspaceManager.getSnapshot(windowId()).tabs;
       },
       { topic: activeWorkspaceTopic },
+    );
+
+    this.handle(
+      "submit-address-bar",
+      (_, tabId: string, input: string) => {
+        return this.workspaceManager.submitAddressBar(windowId(), tabId, input);
+      },
+      { topic: tabWorkspaceTopic },
     );
 
     this.handle(
@@ -581,42 +588,38 @@ export class EventManager {
     });
   }
 
-  private handleSidebarEvents(): void {
+  private handleAgentChatEvents(): void {
     const activeWorkspaceTopic = (): string => this.getActiveWorkspaceTopic();
+    const tabWorkspaceTopic = (tabId: unknown): string =>
+      this.getTabWorkspaceTopic(tabId);
 
     this.handle(
-      "toggle-sidebar",
-      () => {
-        this.mainWindow.sidebar.toggle();
-        this.mainWindow.updateAllBounds();
-        return true;
-      },
-      { topic: activeWorkspaceTopic },
-    );
-
-    this.handle(
-      "sidebar-chat-message",
+      "agent-chat-message",
       async (_, request: { message: string; messageId: string }) => {
-        await this.mainWindow.sidebar.client.sendChatMessage(request);
+        const activeChat = this.mainWindow.getActiveAgentChat();
+        if (activeChat) {
+          await activeChat.client.sendChatMessage(request);
+        }
       },
       { topic: activeWorkspaceTopic },
     );
 
     this.handle(
-      "sidebar-clear-chat",
+      "agent-chat-clear-chat",
       () => {
-        this.mainWindow.sidebar.client.clearMessages();
+        const activeChat = this.mainWindow.getActiveAgentChat();
+        activeChat?.client.clearMessages();
         return true;
       },
       { topic: activeWorkspaceTopic },
     );
 
     this.handle(
-      "sidebar-get-messages",
+      "agent-chat-get-messages",
       () => {
-        return this.mainWindow.sidebar.client.getMessages();
+        return this.mainWindow.getActiveAgentChat()?.client.getMessages() ?? [];
       },
-      { topic: activeWorkspaceTopic },
+      { topic: tabWorkspaceTopic },
     );
   }
 

@@ -10,6 +10,7 @@ interface TabInfo {
   id: string;
   title: string;
   url: string;
+  kind: "browser" | "agent-chat" | "pending";
   isActive: boolean;
   workspaceId: string;
 }
@@ -38,7 +39,7 @@ interface BrowserContextType {
   contextDashboardVisible: boolean;
   isLoading: boolean;
 
-  createTab: (url?: string) => Promise<void>;
+  createTab: () => Promise<void>;
   closeTab: (tabId: string) => Promise<void>;
   switchTab: (tabId: string) => Promise<void>;
   refreshTabs: () => Promise<void>;
@@ -48,7 +49,8 @@ interface BrowserContextType {
   switchWorkspace: (workspaceId: string) => Promise<void>;
   moveTabToWorkspace: (tabId: string, workspaceId: string) => Promise<void>;
 
-  navigateToUrl: (url: string) => Promise<void>;
+  submitAddressBar: (tabId: string, input: string) => Promise<void>;
+  navigateToUrl: (input: string) => Promise<void>;
   goBack: () => Promise<void>;
   goForward: () => Promise<void>;
   reload: () => Promise<void>;
@@ -101,10 +103,10 @@ export const BrowserProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   }, []);
 
-  const createTab = useCallback(async (url?: string) => {
+  const createTab = useCallback(async () => {
     setIsLoading(true);
     try {
-      await window.topBarAPI.createTab(url);
+      await window.topBarAPI.createTab();
     } catch (error) {
       console.error("Failed to create tab:", error);
     } finally {
@@ -172,13 +174,36 @@ export const BrowserProvider: React.FC<{ children: React.ReactNode }> = ({
     [],
   );
 
+  const submitAddressBar = useCallback(
+    async (tabId: string, input: string) => {
+      setIsLoading(true);
+      try {
+        await window.topBarAPI.submitAddressBar(tabId, input);
+      } catch (error) {
+        console.error("Failed to submit address bar:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [],
+  );
+
   const navigateToUrl = useCallback(
-    async (url: string) => {
-      if (!activeTab) return;
+    async (input: string) => {
+      if (!activeTab || activeTab.kind !== "browser") return;
+
+      let finalUrl = input.trim();
+      if (!finalUrl.startsWith("http://") && !finalUrl.startsWith("https://")) {
+        if (finalUrl.includes(".") && !finalUrl.includes(" ")) {
+          finalUrl = `https://${finalUrl}`;
+        } else {
+          finalUrl = `https://www.google.com/search?q=${encodeURIComponent(finalUrl)}`;
+        }
+      }
 
       setIsLoading(true);
       try {
-        await window.topBarAPI.navigateTab(activeTab.id, url);
+        await window.topBarAPI.navigateTab(activeTab.id, finalUrl);
       } catch (error) {
         console.error("Failed to navigate:", error);
       } finally {
@@ -189,7 +214,7 @@ export const BrowserProvider: React.FC<{ children: React.ReactNode }> = ({
   );
 
   const goBack = useCallback(async () => {
-    if (!activeTab) return;
+    if (!activeTab || activeTab.kind !== "browser") return;
 
     try {
       await window.topBarAPI.goBack(activeTab.id);
@@ -199,7 +224,7 @@ export const BrowserProvider: React.FC<{ children: React.ReactNode }> = ({
   }, [activeTab]);
 
   const goForward = useCallback(async () => {
-    if (!activeTab) return;
+    if (!activeTab || activeTab.kind !== "browser") return;
 
     try {
       await window.topBarAPI.goForward(activeTab.id);
@@ -209,7 +234,7 @@ export const BrowserProvider: React.FC<{ children: React.ReactNode }> = ({
   }, [activeTab]);
 
   const reload = useCallback(async () => {
-    if (!activeTab) return;
+    if (!activeTab || activeTab.kind !== "browser") return;
 
     try {
       await window.topBarAPI.reload(activeTab.id);
@@ -269,6 +294,7 @@ export const BrowserProvider: React.FC<{ children: React.ReactNode }> = ({
     removeWorkspace,
     switchWorkspace,
     moveTabToWorkspace,
+    submitAddressBar,
     navigateToUrl,
     goBack,
     goForward,

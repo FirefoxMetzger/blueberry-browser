@@ -5,6 +5,7 @@ interface TabInfo {
   id: string;
   title: string;
   url: string;
+  kind: "browser" | "agent-chat" | "pending";
   isActive: boolean;
   workspaceId: string;
 }
@@ -31,8 +32,7 @@ interface PopupPoint {
 }
 
 const topBarAPI = {
-  createTab: (url?: string) =>
-    electronAPI.ipcRenderer.invoke("create-tab", url),
+  createTab: () => electronAPI.ipcRenderer.invoke("create-tab"),
   closeTab: (tabId: string) =>
     electronAPI.ipcRenderer.invoke("close-tab", tabId),
   switchTab: (tabId: string) =>
@@ -90,7 +90,8 @@ const topBarAPI = {
   tabRunJs: (tabId: string, code: string) =>
     electronAPI.ipcRenderer.invoke("tab-run-js", tabId, code),
 
-  toggleSidebar: () => electronAPI.ipcRenderer.invoke("toggle-sidebar"),
+  submitAddressBar: (tabId: string, input: string) =>
+    electronAPI.ipcRenderer.invoke("submit-address-bar", tabId, input),
 };
 
 if (process.contextIsolated) {

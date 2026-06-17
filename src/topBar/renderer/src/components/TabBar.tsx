@@ -1,5 +1,5 @@
 import React from "react";
-import { Plus, X } from "lucide-react";
+import { MessageSquare, Plus, X } from "lucide-react";
 import { useBrowser } from "../contexts/BrowserContext";
 import { Favicon } from "../components/Favicon";
 import { TabBarButton } from "../components/TabBarButton";
@@ -10,6 +10,7 @@ interface TabItemProps {
   id: string;
   title: string;
   favicon?: string | null;
+  isAgentChat?: boolean;
   isActive: boolean;
   isPinned?: boolean;
   onClose: () => void;
@@ -20,6 +21,7 @@ interface TabItemProps {
 const TabItem: React.FC<TabItemProps> = ({
   title,
   favicon,
+  isAgentChat = false,
   isActive,
   isPinned = false,
   onClose,
@@ -44,7 +46,11 @@ const TabItem: React.FC<TabItemProps> = ({
         onContextMenu={onContextMenu}
       >
         <div className={cn(!isPinned && "mr-2")}>
-          <Favicon src={favicon} />
+          {isAgentChat ? (
+            <MessageSquare className="size-4 text-primary" />
+          ) : (
+            <Favicon src={favicon} />
+          )}
         </div>
 
         {!isPinned && (
@@ -78,7 +84,7 @@ export const TabBar: React.FC = () => {
   const { tabs, createTab, closeTab, switchTab } = useBrowser();
 
   const handleCreateTab = (): void => {
-    createTab("https://www.google.com");
+    void createTab();
   };
 
   const getFavicon = (url: string): string | null => {
@@ -113,7 +119,8 @@ export const TabBar: React.FC = () => {
             key={tab.id}
             id={tab.id}
             title={tab.title}
-            favicon={getFavicon(tab.url)}
+            favicon={tab.kind === "browser" ? getFavicon(tab.url) : null}
+            isAgentChat={tab.kind === "agent-chat"}
             isActive={tab.isActive}
             onClose={() => closeTab(tab.id)}
             onActivate={() => switchTab(tab.id)}

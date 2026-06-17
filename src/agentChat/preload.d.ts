@@ -18,8 +18,7 @@ interface TabInfo {
   isActive: boolean;
 }
 
-interface SidebarAPI {
-  // Chat functionality
+interface AgentChatAPI {
   sendChatMessage: (request: ChatRequest) => Promise<void>;
   clearChat: () => Promise<boolean>;
   getMessages: () => Promise<unknown[]>;
@@ -27,18 +26,14 @@ interface SidebarAPI {
   onMessagesUpdated: (callback: (messages: unknown[]) => void) => void;
   removeChatResponseListener: () => void;
   removeMessagesUpdatedListener: () => void;
-
-  // Page content access
   getPageText: () => Promise<string | null>;
   getCurrentUrl: () => Promise<string | null>;
-
-  // Tab information
   getActiveTabInfo: () => Promise<TabInfo | null>;
 }
 
 declare global {
   interface Window {
     electron: ElectronAPI;
-    sidebarAPI: SidebarAPI;
+    agentChatAPI: AgentChatAPI;
   }
 }

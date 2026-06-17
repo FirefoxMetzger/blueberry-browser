@@ -2,10 +2,9 @@ import React, { useState, useRef, useEffect, useLayoutEffect } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkBreaks from 'remark-breaks'
-import { ArrowUp, Plus } from 'lucide-react'
+import { ArrowUp } from 'lucide-react'
 import { useChat } from '../contexts/ChatContext'
 import { cn } from '../lib/utils'
-import { Button } from './Button'
 
 interface Message {
     id: string
@@ -264,7 +263,7 @@ const ConversationTurnComponent: React.FC<{
 
 // Main Chat Component
 export const Chat: React.FC = () => {
-    const { messages, isLoading, sendMessage, clearChat } = useChat()
+    const { messages, isLoading, sendMessage } = useChat()
     const scrollRef = useAutoScroll(messages)
 
     // Group messages into conversation turns
@@ -292,20 +291,6 @@ export const Chat: React.FC = () => {
         <div className="flex flex-col h-full bg-background">
             {/* Messages Area */}
             <div className="flex-1 overflow-y-auto">
-                <div className="h-8 max-w-3xl mx-auto px-4">
-                    {/* New Chat Button - Floating */}
-                    {messages.length > 0 && (
-                        <Button
-                            onClick={clearChat}
-                            title="Start new chat"
-                            variant="ghost"
-                        >
-                            <Plus className="size-4" />
-                            New Chat
-                        </Button>
-                    )}
-                </div>
-
                 <div className="pb-4 relative max-w-3xl mx-auto px-4">
 
                     {messages.length === 0 ? (
@@ -314,7 +299,7 @@ export const Chat: React.FC = () => {
                             <div className="text-center animate-fade-in max-w-md mx-auto gap-2 flex flex-col">
                                 <h3 className="text-2xl font-bold">🫐</h3>
                                 <p className="text-muted-foreground text-sm">
-                                    Press ⌘E to toggle the sidebar
+                                    Ask anything to get started
                                 </p>
                             </div>
                         </div>

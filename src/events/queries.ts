@@ -15,6 +15,7 @@ export const WORKSPACE_TAB_EVENTS_QUERY = `
       'tab-closed',
       'tab-url-changed',
       'tab-title-changed',
+      'tab-kind-changed',
       'tab-activated',
       'tab-moved'
     )

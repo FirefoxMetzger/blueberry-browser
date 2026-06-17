@@ -3,6 +3,7 @@ import {
   DEFAULT_WORKSPACE_ID,
   DEFAULT_WORKSPACE_TOPIC,
   type GlobalWorkspaceProjection,
+  type TabKind,
   type WorkspaceState,
   workspaceTopic,
 } from "./types";
@@ -40,6 +41,7 @@ function addTabToWorkspace(
   tabId: string,
   url: string,
   title: string,
+  kind: TabKind = "browser",
 ): void {
   if (!state.tabOrder.includes(tabId)) {
     state.tabOrder.push(tabId);
@@ -48,6 +50,7 @@ function addTabToWorkspace(
     id: tabId,
     title,
     url,
+    kind,
   });
 }
 
@@ -112,10 +115,25 @@ function applyTabEventToWorkspace(
 ): void {
   switch (payloadType) {
     case "tab-created": {
-      const { tabId, url, title } =
+      const { tabId, url, title, kind } =
         payload as WorkspaceEventPayloads["tab-created"];
-      addTabToWorkspace(state, tabId, url, title ?? "New Tab");
+      addTabToWorkspace(state, tabId, url, title ?? "New Tab", kind ?? "browser");
       state.lastActiveTabId = tabId;
+      break;
+    }
+    case "tab-kind-changed": {
+      const { tabId, kind, url, title } =
+        payload as WorkspaceEventPayloads["tab-kind-changed"];
+      const tab = state.tabs.get(tabId);
+      if (tab) {
+        tab.kind = kind;
+        if (url !== undefined) {
+          tab.url = url;
+        }
+        if (title !== undefined) {
+          tab.title = title;
+        }
+      }
       break;
     }
     case "tab-closed": {
@@ -153,7 +171,13 @@ function applyTabEventToWorkspace(
       if (move.direction === "out") {
         removeTabFromWorkspace(state, move.tabId);
       } else {
-        addTabToWorkspace(state, move.tabId, move.url, move.title);
+        addTabToWorkspace(
+          state,
+          move.tabId,
+          move.url,
+          move.title,
+          move.kind ?? "browser",
+        );
         state.lastActiveTabId = move.tabId;
       }
       break;

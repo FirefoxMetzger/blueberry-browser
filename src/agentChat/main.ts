@@ -2,45 +2,43 @@ import { is } from "@electron-toolkit/utils";
 import { BaseWindow, WebContentsView } from "electron";
 import { join } from "path";
 import { LLMClient } from "../main/LLMClient";
-import { TOPBAR_BASE_HEIGHT } from "../main/layout";
+import { TOPBAR_BASE_HEIGHT } from "../topBar/layout";
 
-export class SideBar {
+export class AgentChatView {
+  readonly id: string;
   private webContentsView: WebContentsView;
   private baseWindow: BaseWindow;
   private llmClient: LLMClient;
-  private isVisible: boolean = true;
+  private isVisible = false;
 
-  constructor(baseWindow: BaseWindow) {
+  constructor(baseWindow: BaseWindow, id: string) {
     this.baseWindow = baseWindow;
+    this.id = id;
     this.webContentsView = this.createWebContentsView();
     baseWindow.contentView.addChildView(this.webContentsView);
-    this.setupBounds();
-
-    // Initialize LLM client
+    this.webContentsView.setVisible(false);
     this.llmClient = new LLMClient(this.webContentsView.webContents);
   }
 
   private createWebContentsView(): WebContentsView {
     const webContentsView = new WebContentsView({
       webPreferences: {
-        preload: join(__dirname, "../preload/sideBar.js"),
+        preload: join(__dirname, "../preload/agentChat.js"),
         nodeIntegration: false,
         contextIsolation: true,
-        sandbox: false, // Need to disable sandbox for preload to work
+        sandbox: false,
       },
     });
 
-    // Load the Sidebar React app
     if (is.dev && process.env["ELECTRON_RENDERER_URL"]) {
-      // In development, load through Vite dev server
-      const sidebarUrl = new URL(
-        "/sideBar/renderer/",
+      const agentChatUrl = new URL(
+        "/agentChat/renderer/",
         process.env["ELECTRON_RENDERER_URL"],
       );
-      webContentsView.webContents.loadURL(sidebarUrl.toString());
+      webContentsView.webContents.loadURL(agentChatUrl.toString());
     } else {
       webContentsView.webContents.loadFile(
-        join(__dirname, "../renderer/sideBar/renderer/index.html"),
+        join(__dirname, "../renderer/agentChat/renderer/index.html"),
       );
     }
 
@@ -48,13 +46,11 @@ export class SideBar {
   }
 
   private setupBounds(contentTop = TOPBAR_BASE_HEIGHT): void {
-    if (!this.isVisible) return;
-
     const bounds = this.baseWindow.getBounds();
     this.webContentsView.setBounds({
-      x: bounds.width - 400,
+      x: 0,
       y: contentTop,
-      width: 400,
+      width: bounds.width,
       height: bounds.height - contentTop,
     });
   }
@@ -62,15 +58,18 @@ export class SideBar {
   updateBounds(contentTop = TOPBAR_BASE_HEIGHT): void {
     if (this.isVisible) {
       this.setupBounds(contentTop);
-    } else {
-      // Hide the sidebar
-      this.webContentsView.setBounds({
-        x: 0,
-        y: 0,
-        width: 0,
-        height: 0,
-      });
     }
+  }
+
+  show(contentTop = TOPBAR_BASE_HEIGHT): void {
+    this.isVisible = true;
+    this.setupBounds(contentTop);
+    this.webContentsView.setVisible(true);
+  }
+
+  hide(): void {
+    this.isVisible = false;
+    this.webContentsView.setVisible(false);
   }
 
   get view(): WebContentsView {
@@ -81,30 +80,7 @@ export class SideBar {
     return this.llmClient;
   }
 
-  show(): void {
-    this.isVisible = true;
-    this.setupBounds();
-  }
-
-  hide(): void {
-    this.isVisible = false;
-    this.webContentsView.setBounds({
-      x: 0,
-      y: 0,
-      width: 0,
-      height: 0,
-    });
-  }
-
-  toggle(): void {
-    if (this.isVisible) {
-      this.hide();
-    } else {
-      this.show();
-    }
-  }
-
-  getIsVisible(): boolean {
-    return this.isVisible;
+  destroy(): void {
+    this.webContentsView.webContents.close();
   }
 }

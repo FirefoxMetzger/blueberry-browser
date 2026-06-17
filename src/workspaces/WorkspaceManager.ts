@@ -4,7 +4,10 @@ import type {
   WorkspacePayloadType,
 } from "../events/types";
 import { eventDatabase } from "../events/database";
-import { WORKSPACE_EVENTS_QUERY, LATEST_WORKSPACE_SWITCH_QUERY } from "../events/queries";
+import {
+  WORKSPACE_EVENTS_QUERY,
+  LATEST_WORKSPACE_SWITCH_QUERY,
+} from "../events/queries";
 import type { Window } from "../main/Window";
 import { applyEventRow, replayProjection } from "./WorkspaceProjection";
 import { TabHistoryAggregator } from "./WorkspaceHistory";
@@ -14,7 +17,9 @@ import {
   createWorkspaceId,
   DEFAULT_WORKSPACE_ID,
   DEFAULT_WORKSPACE_TOPIC,
+  PENDING_TAB_URL,
   type GlobalWorkspaceProjection,
+  type TabKind,
   type TabRecord,
   type TabSnapshot,
   type WorkspaceInfo,
@@ -42,6 +47,43 @@ interface WorkspaceSwitchEventRow {
 }
 
 type StateListener = () => void;
+
+function truncateTitle(text: string, maxLength = 40): string {
+  const trimmed = text.trim();
+  if (trimmed.length <= maxLength) {
+    return trimmed;
+  }
+  return `${trimmed.slice(0, maxLength - 1)}…`;
+}
+
+export function normalizeAddressBarInput(
+  input: string,
+  allowSearch: boolean,
+): string | null {
+  const trimmed = input.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+    try {
+      new URL(trimmed);
+      return trimmed;
+    } catch {
+      return null;
+    }
+  }
+
+  if (trimmed.includes(".") && !trimmed.includes(" ")) {
+    return `https://${trimmed}`;
+  }
+
+  if (allowSearch) {
+    return `https://www.google.com/search?q=${encodeURIComponent(trimmed)}`;
+  }
+
+  return null;
+}
 
 export class WorkspaceManager {
   private projection: GlobalWorkspaceProjection;
@@ -146,7 +188,7 @@ export class WorkspaceManager {
     const workspace = this.projection.workspaces.get(startupWorkspaceId);
     if (!workspace || workspace.tabOrder.length === 0) {
       if (startupWorkspaceId === DEFAULT_WORKSPACE_ID) {
-        this.createTab(windowId, "https://www.google.com");
+        this.createTab(windowId);
       } else {
         this.switchWorkspace(windowId, startupWorkspaceId);
       }
@@ -218,12 +260,12 @@ export class WorkspaceManager {
   getSnapshot(windowId: string): WorkspaceSnapshot {
     const activeWorkspaceId = this.getSelectedWorkspaceId(windowId);
     const window = this.windows.get(windowId);
-    const activeTabId = window?.activeTab?.id ?? null;
+    const activeItemId = window?.activeWorkspaceItemId ?? null;
 
     const tabs = this.getTabsForWorkspace(activeWorkspaceId, windowId).map(
       (tab) => ({
         ...tab,
-        isActive: tab.id === activeTabId,
+        isActive: tab.id === activeItemId,
       }),
     );
 
@@ -243,6 +285,11 @@ export class WorkspaceManager {
     return this.getWorkspaceState(workspaceId)?.tabOrder ?? [];
   }
 
+  getTabKind(workspaceId: string, tabId: string): TabKind {
+    const record = this.getTabRecord(workspaceId, tabId);
+    return record?.kind ?? "browser";
+  }
+
   private getTabsForWorkspace(
     workspaceId: string,
     windowId: string,
@@ -256,10 +303,15 @@ export class WorkspaceManager {
     return workspace.tabOrder.map((tabId) => {
       const materialized = window.getTab(tabId);
       const record = workspace.tabs.get(tabId);
+      const kind = record?.kind ?? "browser";
       return {
         id: tabId,
-        title: materialized?.title ?? record?.title ?? "New Tab",
-        url: materialized?.url ?? record?.url ?? "https://www.google.com",
+        title:
+          materialized?.title ??
+          record?.title ??
+          (kind === "agent-chat" ? "Agent Chat" : "New Tab"),
+        url: materialized?.url ?? record?.url ?? PENDING_TAB_URL,
+        kind,
         isActive: false,
         workspaceId,
       };
@@ -284,17 +336,14 @@ export class WorkspaceManager {
     }
 
     const window = this.windows.get(windowId);
-    if (window?.getTab(tabId)) {
+    if (window?.getTab(tabId) || window?.getAgentChat(tabId)) {
       return DEFAULT_WORKSPACE_ID;
     }
 
     return null;
   }
 
-  createTab(
-    windowId: string,
-    url = "https://www.google.com",
-  ): TabSnapshot | null {
+  createTab(windowId: string): TabSnapshot | null {
     const window = this.windows.get(windowId);
     if (!window) {
       return null;
@@ -306,22 +355,132 @@ export class WorkspaceManager {
 
     this.publishDomainEvent(topic, "tab-created", {
       tabId,
-      url,
+      url: PENDING_TAB_URL,
       title: "New Tab",
+      kind: "pending",
     });
 
-    window.materializeTab(tabId, url, (changedTabId, title, changedUrl) => {
-      this.handleTabStateChanged(windowId, changedTabId, title, changedUrl);
-    });
+    window.materializeTab(
+      tabId,
+      PENDING_TAB_URL,
+      (changedTabId, title, changedUrl) => {
+        this.handleTabStateChanged(windowId, changedTabId, title, changedUrl);
+      },
+      "New Tab",
+    );
     window.switchActiveTab(tabId);
 
     return {
       id: tabId,
       title: "New Tab",
-      url,
+      url: PENDING_TAB_URL,
+      kind: "pending",
       isActive: true,
       workspaceId,
     };
+  }
+
+  submitAddressBar(
+    windowId: string,
+    tabId: string,
+    input: string,
+  ): boolean {
+    const window = this.windows.get(windowId);
+    if (!window) {
+      return false;
+    }
+
+    const workspaceId = this.findTabWorkspace(tabId, windowId);
+    if (!workspaceId) {
+      return false;
+    }
+
+    const kind = this.getTabKind(workspaceId, tabId);
+    const trimmed = input.trim();
+    if (!trimmed) {
+      return false;
+    }
+
+    if (kind === "pending") {
+      const url = normalizeAddressBarInput(trimmed, false);
+      if (url) {
+        this.commitPendingTab(windowId, tabId, url);
+      } else {
+        this.convertTabToAgentChat(windowId, tabId, trimmed);
+      }
+      return true;
+    }
+
+    if (kind === "browser") {
+      const url = normalizeAddressBarInput(trimmed, true);
+      if (url) {
+        this.handleNavigateTab(windowId, tabId, url);
+      }
+      return true;
+    }
+
+    return false;
+  }
+
+  private commitPendingTab(
+    windowId: string,
+    tabId: string,
+    url: string,
+  ): void {
+    const workspaceId = this.findTabWorkspace(tabId, windowId);
+    if (!workspaceId) {
+      return;
+    }
+
+    const topic = this.getWorkspaceTopic(workspaceId);
+    this.publishDomainEvent(topic, "tab-kind-changed", {
+      tabId,
+      kind: "browser",
+      url,
+    });
+
+    const tab = this.windows.get(windowId)?.getTab(tabId);
+    if (tab) {
+      void tab.loadURL(url);
+    }
+
+    this.notifyStateChanged();
+  }
+
+  private convertTabToAgentChat(
+    windowId: string,
+    tabId: string,
+    initialMessage: string,
+  ): void {
+    const window = this.windows.get(windowId);
+    const workspaceId = this.findTabWorkspace(tabId, windowId);
+    if (!window || !workspaceId) {
+      return;
+    }
+
+    const title = truncateTitle(initialMessage);
+    const topic = this.getWorkspaceTopic(workspaceId);
+
+    window.destroyTabView(tabId);
+
+    this.publishDomainEvent(topic, "tab-kind-changed", {
+      tabId,
+      kind: "agent-chat",
+      title,
+      url: "",
+    });
+
+    const chat = window.materializeAgentChat(tabId);
+    window.switchActiveAgentChat(tabId);
+
+    this.publishDomainEvent(topic, "tab-activated", { tabId });
+
+    void chat.client.sendChatMessage({
+      message: initialMessage,
+      messageId: Date.now().toString(),
+    });
+
+    this.notifyStateChanged();
   }
 
   closeTab(windowId: string, tabId: string): boolean {
@@ -335,10 +494,15 @@ export class WorkspaceManager {
       return false;
     }
 
+    const kind = this.getTabKind(workspaceId, tabId);
     const topic = this.getWorkspaceTopic(workspaceId);
     this.publishDomainEvent(topic, "tab-closed", { tabId });
 
-    window.destroyTabView(tabId);
+    if (kind === "agent-chat") {
+      window.destroyAgentChatView(tabId);
+    } else {
+      window.destroyTabView(tabId);
+    }
 
     if (workspaceId === this.getSelectedWorkspaceId(windowId)) {
       const remaining = this.getTabsForWorkspace(workspaceId, windowId);
@@ -367,20 +531,28 @@ export class WorkspaceManager {
       return false;
     }
 
-    if (!window.getTab(tabId)) {
-      const record = this.getTabRecord(workspaceId, tabId);
-      window.materializeTab(
-        tabId,
-        record?.url ?? "https://www.google.com",
-        (changedTabId, title, url) => {
-          this.handleTabStateChanged(windowId, changedTabId, title, url);
-        },
-        record?.title,
-        record?.history,
-      );
-    }
+    const kind = this.getTabKind(workspaceId, tabId);
+    const record = this.getTabRecord(workspaceId, tabId);
 
-    window.switchActiveTab(tabId);
+    if (kind === "agent-chat") {
+      if (!window.getAgentChat(tabId)) {
+        window.materializeAgentChat(tabId);
+      }
+      window.switchActiveAgentChat(tabId);
+    } else {
+      if (!window.getTab(tabId)) {
+        window.materializeTab(
+          tabId,
+          record?.url ?? PENDING_TAB_URL,
+          (changedTabId, title, url) => {
+            this.handleTabStateChanged(windowId, changedTabId, title, url);
+          },
+          record?.title,
+          record?.history,
+        );
+      }
+      window.switchActiveTab(tabId);
+    }
 
     this.publishDomainEvent(
       this.getWorkspaceTopic(workspaceId),
@@ -424,8 +596,15 @@ export class WorkspaceManager {
     this.windowWorkspaceSelection.set(windowId, workspaceId);
 
     const tabIds = this.getWorkspaceTabIds(workspaceId);
+    const browserTabIds = tabIds.filter(
+      (tabId) => this.getTabKind(workspaceId, tabId) !== "agent-chat",
+    );
+    const agentChatIds = tabIds.filter(
+      (tabId) => this.getTabKind(workspaceId, tabId) === "agent-chat",
+    );
+
     window.syncVisibleTabs(
-      tabIds,
+      browserTabIds,
       (tabId, url) => {
         const record = this.getTabRecord(workspaceId, tabId);
         window.materializeTab(
@@ -447,6 +626,8 @@ export class WorkspaceManager {
         window.getTabRecordUrl(tabId) ??
         this.getTabRecord(workspaceId, tabId)?.url,
     );
+
+    window.syncVisibleAgentChats(agentChatIds);
 
     const workspace = this.getWorkspaceState(workspaceId);
     const targetTabId =
@@ -526,7 +707,12 @@ export class WorkspaceManager {
       }
 
       for (const tabId of workspace.tabOrder) {
-        window.destroyTabView(tabId);
+        const kind = workspace.tabs.get(tabId)?.kind ?? "browser";
+        if (kind === "agent-chat") {
+          window.destroyAgentChatView(tabId);
+        } else {
+          window.destroyTabView(tabId);
+        }
       }
     }
 
@@ -562,7 +748,8 @@ export class WorkspaceManager {
 
     const tab = window.getTab(tabId);
     const record = this.getTabRecord(sourceWorkspaceId, tabId);
-    const url = tab?.url ?? record?.url ?? "https://www.google.com";
+    const kind = record?.kind ?? "browser";
+    const url = tab?.url ?? record?.url ?? PENDING_TAB_URL;
     const title = tab?.title ?? record?.title ?? "New Tab";
     const history = record?.history;
     const moveId = createMoveId();
@@ -582,6 +769,7 @@ export class WorkspaceManager {
           toWorkspaceId: targetWorkspaceId,
           url,
           title,
+          kind,
         },
       },
       {
@@ -595,12 +783,17 @@ export class WorkspaceManager {
           toWorkspaceId: targetWorkspaceId,
           url,
           title,
+          kind,
         },
       },
     ]);
 
     if (this.getSelectedWorkspaceId(windowId) === sourceWorkspaceId) {
-      window.hideTab(tabId);
+      if (kind === "agent-chat") {
+        window.hideAgentChat(tabId);
+      } else {
+        window.hideTab(tabId);
+      }
       const remaining = this.getTabsForWorkspace(sourceWorkspaceId, windowId);
       if (remaining.length > 0) {
         this.switchTab(windowId, remaining[0].id);
@@ -615,22 +808,27 @@ export class WorkspaceManager {
       if (
         id !== windowId &&
         this.getSelectedWorkspaceId(id) === targetWorkspaceId &&
-        !otherWindow.getTab(tabId)
+        !otherWindow.getTab(tabId) &&
+        !otherWindow.getAgentChat(tabId)
       ) {
-        otherWindow.materializeTab(
-          tabId,
-          url,
-          (changedTabId, changedTitle, changedUrl) => {
-            this.handleTabStateChanged(
-              id,
-              changedTabId,
-              changedTitle,
-              changedUrl,
-            );
-          },
-          title,
-          history,
-        );
+        if (kind === "agent-chat") {
+          otherWindow.materializeAgentChat(tabId);
+        } else {
+          otherWindow.materializeTab(
+            tabId,
+            url,
+            (changedTabId, changedTitle, changedUrl) => {
+              this.handleTabStateChanged(
+                id,
+                changedTabId,
+                changedTitle,
+                changedUrl,
+              );
+            },
+            title,
+            history,
+          );
+        }
       }
     }
 
@@ -653,6 +851,12 @@ export class WorkspaceManager {
   ): void {
     const workspaceId = this.findTabWorkspace(tabId, windowId);
     if (!workspaceId) {
+      this.notifyStateChanged();
+      return;
+    }
+
+    const kind = this.getTabKind(workspaceId, tabId);
+    if (kind !== "browser") {
       this.notifyStateChanged();
       return;
     }

@@ -12,15 +12,13 @@ interface ChatResponse {
   isComplete: boolean;
 }
 
-// Sidebar specific APIs
-const sidebarAPI = {
-  // Chat functionality
+const agentChatAPI = {
   sendChatMessage: (request: ChatRequest) =>
-    electronAPI.ipcRenderer.invoke("sidebar-chat-message", request),
+    electronAPI.ipcRenderer.invoke("agent-chat-message", request),
 
-  clearChat: () => electronAPI.ipcRenderer.invoke("sidebar-clear-chat"),
+  clearChat: () => electronAPI.ipcRenderer.invoke("agent-chat-clear-chat"),
 
-  getMessages: () => electronAPI.ipcRenderer.invoke("sidebar-get-messages"),
+  getMessages: () => electronAPI.ipcRenderer.invoke("agent-chat-get-messages"),
 
   onChatResponse: (callback: (data: ChatResponse) => void) => {
     electronAPI.ipcRenderer.on("chat-response", (_, data) => callback(data));
@@ -28,7 +26,7 @@ const sidebarAPI = {
 
   onMessagesUpdated: (callback: (messages: unknown[]) => void) => {
     electronAPI.ipcRenderer.on("chat-messages-updated", (_, messages) =>
-      callback(messages)
+      callback(messages),
     );
   },
 
@@ -40,21 +38,15 @@ const sidebarAPI = {
     electronAPI.ipcRenderer.removeAllListeners("chat-messages-updated");
   },
 
-  // Page content access
   getPageText: () => electronAPI.ipcRenderer.invoke("get-page-text"),
   getCurrentUrl: () => electronAPI.ipcRenderer.invoke("get-current-url"),
-
-  // Tab information
   getActiveTabInfo: () => electronAPI.ipcRenderer.invoke("get-active-tab-info"),
 };
 
-// Use `contextBridge` APIs to expose Electron APIs to
-// renderer only if context isolation is enabled, otherwise
-// just add to the DOM global.
 if (process.contextIsolated) {
   try {
     contextBridge.exposeInMainWorld("electron", electronAPI);
-    contextBridge.exposeInMainWorld("sidebarAPI", sidebarAPI);
+    contextBridge.exposeInMainWorld("agentChatAPI", agentChatAPI);
   } catch (error) {
     console.error(error);
   }
@@ -62,5 +54,5 @@ if (process.contextIsolated) {
   // @ts-ignore (define in dts)
   window.electron = electronAPI;
   // @ts-ignore (define in dts)
-  window.sidebarAPI = sidebarAPI;
+  window.agentChatAPI = agentChatAPI;
 }

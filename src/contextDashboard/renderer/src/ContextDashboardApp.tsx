@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { MessageSquare } from 'lucide-react'
 import { useDarkMode } from '@darkMode/useDarkMode'
 import {
     WORKSPACE_ACTIVITY_QUERY,
@@ -23,6 +24,7 @@ interface DashboardTab {
     id: string
     title: string
     url: string
+    kind: 'browser' | 'agent-chat' | 'pending'
     isActive: boolean
 }
 
@@ -36,6 +38,7 @@ const TAB_EVENT_TYPES = new Set([
     'tab-closed',
     'tab-url-changed',
     'tab-title-changed',
+    'tab-kind-changed',
     'tab-activated',
     'tab-moved',
 ])
@@ -60,14 +63,22 @@ const formatType = (type: string): string => {
 
 const buildTabsFromEventRows = (rows: TabEventRow[]): DashboardTab[] => {
     const tabOrder: string[] = []
-    const tabs = new Map<string, { id: string; title: string; url: string }>()
+    const tabs = new Map<
+        string,
+        { id: string; title: string; url: string; kind: DashboardTab['kind'] }
+    >()
     let lastActiveTabId: string | null = null
 
-    const addTab = (tabId: string, url: string, title: string): void => {
+    const addTab = (
+        tabId: string,
+        url: string,
+        title: string,
+        kind: DashboardTab['kind'] = 'browser'
+    ): void => {
         if (!tabOrder.includes(tabId)) {
             tabOrder.push(tabId)
         }
-        tabs.set(tabId, { id: tabId, title, url })
+        tabs.set(tabId, { id: tabId, title, url, kind })
     }
 
     const removeTab = (tabId: string): void => {
@@ -90,7 +101,8 @@ const buildTabsFromEventRows = (rows: TabEventRow[]): DashboardTab[] => {
                 addTab(
                     payload.tabId as string,
                     payload.url as string,
-                    (payload.title as string | undefined) ?? 'New Tab'
+                    (payload.title as string | undefined) ?? 'New Tab',
+                    (payload.kind as DashboardTab['kind'] | undefined) ?? 'browser'
                 )
                 lastActiveTabId = payload.tabId as string
                 break
@@ -111,6 +123,19 @@ const buildTabsFromEventRows = (rows: TabEventRow[]): DashboardTab[] => {
                 }
                 break
             }
+            case 'tab-kind-changed': {
+                const tab = tabs.get(payload.tabId as string)
+                if (tab) {
+                    tab.kind = payload.kind as DashboardTab['kind']
+                    if (typeof payload.url === 'string') {
+                        tab.url = payload.url
+                    }
+                    if (typeof payload.title === 'string') {
+                        tab.title = payload.title
+                    }
+                }
+                break
+            }
             case 'tab-activated':
                 if (tabs.has(payload.tabId as string)) {
                     lastActiveTabId = payload.tabId as string
@@ -123,7 +148,8 @@ const buildTabsFromEventRows = (rows: TabEventRow[]): DashboardTab[] => {
                     addTab(
                         payload.tabId as string,
                         payload.url as string,
-                        payload.title as string
+                        payload.title as string,
+                        (payload.kind as DashboardTab['kind'] | undefined) ?? 'browser'
                     )
                     lastActiveTabId = payload.tabId as string
                 }
@@ -156,6 +182,25 @@ const TabRow: React.FC<{ tab: DashboardTab }> = ({ tab }) => {
                 }`}
             >
                 {tab.title || 'New Tab'}
+            </span>
+        </li>
+    )
+}
+
+const ConversationRow: React.FC<{ tab: DashboardTab }> = ({ tab }) => {
+    return (
+        <li
+            className={`flex min-w-0 items-center gap-2 border-b border-border/70 px-3 py-2 last:border-b-0 ${
+                tab.isActive ? 'bg-muted/40' : ''
+            }`}
+        >
+            <MessageSquare className="size-4 shrink-0 text-muted-foreground" />
+            <span
+                className={`min-w-0 flex-1 truncate text-xs ${
+                    tab.isActive ? 'font-semibold text-foreground' : 'text-foreground/90'
+                }`}
+            >
+                {tab.title || 'Agent Chat'}
             </span>
         </li>
     )
@@ -293,8 +338,18 @@ export const ContextDashboardApp: React.FC = () => {
         }
     }, [applyWorkspaceContext, loadTabs])
 
+    const browserTabs = useMemo(
+        () => tabs.filter((tab) => tab.kind === 'browser' || tab.kind === 'pending'),
+        [tabs]
+    )
+
+    const conversations = useMemo(
+        () => tabs.filter((tab) => tab.kind === 'agent-chat'),
+        [tabs]
+    )
+
     const tabsContent = useMemo(() => {
-        if (tabs.length === 0) {
+        if (browserTabs.length === 0) {
             return (
                 <div className="px-3 py-3 text-xs text-muted-foreground">
                     No open tabs in this workspace.
@@ -304,12 +359,30 @@ export const ContextDashboardApp: React.FC = () => {
 
         return (
             <ul className="max-h-48 overflow-y-auto">
-                {tabs.map((tab) => (
+                {browserTabs.map((tab) => (
                     <TabRow key={tab.id} tab={tab} />
                 ))}
             </ul>
         )
-    }, [tabs])
+    }, [browserTabs])
+
+    const conversationsContent = useMemo(() => {
+        if (conversations.length === 0) {
+            return (
+                <div className="px-3 py-3 text-xs text-muted-foreground">
+                    No open conversations in this workspace.
+                </div>
+            )
+        }
+
+        return (
+            <ul className="max-h-48 overflow-y-auto">
+                {conversations.map((tab) => (
+                    <ConversationRow key={tab.id} tab={tab} />
+                ))}
+            </ul>
+        )
+    }, [conversations])
 
     const activityContent = useMemo(() => {
         if (error) {
@@ -357,6 +430,15 @@ export const ContextDashboardApp: React.FC = () => {
                     </h2>
                 </div>
                 {tabsContent}
+            </section>
+
+            <section className="shrink-0 border-b border-border">
+                <div className="border-b border-border/70 bg-muted/10 px-3 py-2">
+                    <h2 className="text-[11px] font-semibold uppercase tracking-wide text-foreground">
+                        Conversations
+                    </h2>
+                </div>
+                {conversationsContent}
             </section>
 
             <section className="flex min-h-0 flex-1 flex-col">

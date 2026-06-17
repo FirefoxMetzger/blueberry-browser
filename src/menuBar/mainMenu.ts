@@ -74,12 +74,6 @@ export class AppMenu {
           },
           { type: "separator" },
           {
-            label: "Toggle Sidebar",
-            accelerator: "CmdOrCtrl+E",
-            click: () => this.handleToggleSidebar(),
-          },
-          { type: "separator" },
-          {
             label: "Toggle Developer Tools",
             accelerator:
               process.platform === "darwin" ? "Alt+Command+I" : "Ctrl+Shift+I",
@@ -116,18 +110,16 @@ export class AppMenu {
 
   // Menu action handlers
   private handleNewTab(): void {
-    const url = "https://www.google.com";
-
-    this.publishEvent("create-tab", [url]);
-    this.workspaceManager.createTab(this.mainWindow.id, url);
+    this.publishEvent("create-tab", []);
+    this.workspaceManager.createTab(this.mainWindow.id);
   }
 
   private handleCloseTab(): void {
-    const activeTab = this.mainWindow.activeTab;
+    const activeItemId = this.mainWindow.activeWorkspaceItemId;
 
-    if (activeTab) {
-      this.publishEvent("close-tab", [activeTab.id]);
-      this.workspaceManager.closeTab(this.mainWindow.id, activeTab.id);
+    if (activeItemId) {
+      this.publishEvent("close-tab", [activeItemId]);
+      this.workspaceManager.closeTab(this.mainWindow.id, activeItemId);
     }
   }
 
@@ -154,11 +146,6 @@ export class AppMenu {
     }
   }
 
-  private handleToggleSidebar(): void {
-    this.publishEvent("toggle-sidebar");
-    this.mainWindow.sidebar.toggle();
-    this.mainWindow.updateAllBounds();
-  }
 
   private handleToggleDevTools(): void {
     const activeTab = this.mainWindow.activeTab;

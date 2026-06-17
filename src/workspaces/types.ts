@@ -1,5 +1,9 @@
 export const DEFAULT_WORKSPACE_TOPIC = "default";
 
+export const PENDING_TAB_URL = "about:blank";
+
+export type TabKind = "browser" | "agent-chat" | "pending";
+
 export interface WorkspaceInfo {
   id: string;
   name: string;
@@ -18,6 +22,7 @@ export interface TabRecord {
   id: string;
   title: string;
   url: string;
+  kind: TabKind;
   history?: TabHistorySnapshot;
 }
 
@@ -45,6 +50,7 @@ export interface TabSnapshot {
   id: string;
   title: string;
   url: string;
+  kind: TabKind;
   isActive: boolean;
   workspaceId: string;
 }

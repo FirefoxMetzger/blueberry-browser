@@ -12,7 +12,7 @@ export default defineConfig({
       rollupOptions: {
         input: {
           topBar: resolve(__dirname, "src/topBar/preload.ts"),
-          sideBar: resolve(__dirname, "src/sideBar/preload.ts"),
+          agentChat: resolve(__dirname, "src/agentChat/preload.ts"),
           contextDashboard: resolve(
             __dirname,
             "src/contextDashboard/preload.ts",
@@ -27,7 +27,7 @@ export default defineConfig({
       rollupOptions: {
         input: {
           topbar: resolve(__dirname, "src/topBar/renderer/index.html"),
-          sidebar: resolve(__dirname, "src/sideBar/renderer/index.html"),
+          agentchat: resolve(__dirname, "src/agentChat/renderer/index.html"),
           contextdashboard: resolve(__dirname, "src/contextDashboard/renderer/index.html"),
         },
       },
