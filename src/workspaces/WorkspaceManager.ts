@@ -9,6 +9,7 @@ import {
   LATEST_WORKSPACE_SWITCH_QUERY,
 } from "../events/queries";
 import type { Window } from "../main/Window";
+import type { Tab } from "../browserTab/Tab";
 import { applyEventRow, replayProjection } from "./WorkspaceProjection";
 import { TabHistoryAggregator } from "./WorkspaceHistory";
 import {
@@ -328,6 +329,59 @@ export class WorkspaceManager {
     return workspaceId ? this.getWorkspaceTopic(workspaceId) : null;
   }
 
+  configureAgentChatClient(windowId: string, tabId: string): void {
+    const window = this.windows.get(windowId);
+    const chat = window?.getAgentChat(tabId);
+    if (!window || !chat) {
+      return;
+    }
+
+    chat.client.setWorkspaceTopicResolver(
+      () =>
+        this.getTabWorkspaceTopic(windowId, tabId) ??
+        this.getWorkspaceTopic(this.getSelectedWorkspaceId(windowId)),
+    );
+    chat.client.setWorkspaceTabsResolver(
+      () => this.getSnapshot(windowId).tabs,
+    );
+    chat.client.setEnsureBrowserTabResolver(
+      (targetTabId) => this.ensureBrowserTabMaterialized(windowId, targetTabId),
+    );
+  }
+
+  ensureBrowserTabMaterialized(windowId: string, tabId: string): Tab | null {
+    const window = this.windows.get(windowId);
+    if (!window) {
+      return null;
+    }
+
+    const existing = window.getTab(tabId);
+    if (existing) {
+      return existing;
+    }
+
+    const workspaceId = this.findTabWorkspace(tabId, windowId);
+    if (!workspaceId) {
+      return null;
+    }
+
+    const kind = this.getTabKind(workspaceId, tabId);
+    if (kind !== "browser" && kind !== "pending") {
+      return null;
+    }
+
+    const record = this.getTabRecord(workspaceId, tabId);
+    return window.materializeTab(
+      tabId,
+      record?.url ?? PENDING_TAB_URL,
+      (changedTabId, title, changedUrl) => {
+        this.handleTabStateChanged(windowId, changedTabId, title, changedUrl);
+      },
+      record?.title,
+      record?.history,
+    );
+  }
+
   private findTabWorkspace(tabId: string, windowId: string): string | null {
     for (const [workspaceId, workspace] of this.projection.workspaces) {
       if (workspace.tabs.has(tabId)) {
@@ -476,7 +530,7 @@ export class WorkspaceManager {
     this.publishDomainEvent(topic, "tab-activated", { tabId });
 
     const messageId = Date.now().toString();
-    chat.client.setWorkspaceTopicResolver(() => topic);
+    this.configureAgentChatClient(windowId, tabId);
     const chatEvent = eventDatabase.publish(
       topic,
       1,
@@ -550,6 +604,7 @@ export class WorkspaceManager {
       if (!window.getAgentChat(tabId)) {
         window.materializeAgentChat(tabId);
       }
+      this.configureAgentChatClient(windowId, tabId);
       window.switchActiveAgentChat(tabId);
     } else {
       if (!window.getTab(tabId)) {
@@ -907,6 +962,12 @@ export class WorkspaceManager {
     const workspaceId = this.findTabWorkspace(tabId, windowId);
     if (!workspaceId) {
       this.notifyStateChanged();
+      return;
+    }
+
+    const kind = this.getTabKind(workspaceId, tabId);
+    if (kind === "pending") {
+      this.commitPendingTab(windowId, tabId, url);
       return;
     }
 

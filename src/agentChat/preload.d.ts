@@ -28,6 +28,15 @@ interface AgentChatContext {
   topic: string;
 }
 
+interface GrepNavigationRequest {
+  tabId: string;
+  sourceType: "browser-tab" | "agent-chat";
+  pattern: string;
+  caseInsensitive: boolean;
+  lineText: string;
+  lineNumber: number;
+}
+
 interface AgentChatAPI {
   sendChatMessage: (request: ChatRequest) => Promise<void>;
   clearChat: () => Promise<boolean>;
@@ -43,6 +52,10 @@ interface AgentChatAPI {
   getPageText: () => Promise<string | null>;
   getCurrentUrl: () => Promise<string | null>;
   getActiveTabInfo: () => Promise<TabInfo | null>;
+  switchTab: (tabId: string) => Promise<boolean>;
+  navigateGrepMatch: (
+    request: GrepNavigationRequest,
+  ) => Promise<{ success: boolean; switched: boolean; highlighted: boolean }>;
 }
 
 declare global {

@@ -1,10 +1,24 @@
 import { resolve } from "path";
+import { copyFileSync } from "node:fs";
 import { defineConfig, externalizeDepsPlugin } from "electron-vite";
 import react from "@vitejs/plugin-react";
+import type { Plugin } from "vite";
+
+function copyAgentInstructions(): Plugin {
+  return {
+    name: "copy-agent-instructions",
+    closeBundle() {
+      copyFileSync(
+        resolve(__dirname, "src/agentChat/instructions.md"),
+        resolve(__dirname, "out/main/instructions.md"),
+      );
+    },
+  };
+}
 
 export default defineConfig({
   main: {
-    plugins: [externalizeDepsPlugin()],
+    plugins: [externalizeDepsPlugin(), copyAgentInstructions()],
   },
   preload: {
     plugins: [externalizeDepsPlugin()],

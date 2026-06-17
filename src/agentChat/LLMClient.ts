@@ -1,17 +1,37 @@
 import { WebContents } from "electron";
-import { streamText, type LanguageModel, type CoreMessage } from "ai";
+import {
+  streamText,
+  stepCountIs,
+  type LanguageModel,
+  type CoreMessage,
+} from "ai";
 import { openai } from "@ai-sdk/openai";
 import { anthropic } from "@ai-sdk/anthropic";
 import * as dotenv from "dotenv";
 import { join } from "path";
 import type { Window } from "../main/Window";
+import type { Tab } from "../browserTab/Tab";
+import type { TabSnapshot } from "../workspaces/types";
 import { eventDatabase } from "../events/database";
 import { AGENT_CHAT_MESSAGES_QUERY } from "../events/queries";
 import {
   coreMessagesFromEventRows,
+  displayMessagesFromEventRows,
+  serializeTurnItems,
   type AgentChatEventRow,
   type AgentChatMessagePayload,
 } from "./chatHistory";
+import {
+  sanitizeAssistantText,
+  summarizeToolInput,
+  applyToolResultToDisplayMessage,
+  type ChatDisplayMessage,
+  type AssistantDisplayMessage,
+  type ToolDisplayMessage,
+} from "./displayMessages";
+import { createAgentTools } from "./tools";
+import type { AgentToolContext } from "./tools/types";
+import { loadAgentInstructions } from "./loadInstructions";
 
 dotenv.config({ path: join(__dirname, "../../.env") });
 
@@ -32,18 +52,21 @@ const DEFAULT_MODELS: Record<LLMProvider, string> = {
   anthropic: "claude-sonnet-4-6",
 };
 
-const MAX_CONTEXT_LENGTH = 4000;
 const DEFAULT_TEMPERATURE = 0.7;
+const MAX_AGENT_STEPS = 10;
 
 export class LLMClient {
   private readonly webContents: WebContents;
   private readonly tabId: string;
   private window: Window | null = null;
   private getWorkspaceTopic: (() => string | null) | null = null;
+  private getWorkspaceTabs: (() => TabSnapshot[]) | null = null;
+  private ensureBrowserTab: ((tabId: string) => Tab | null) | null = null;
   private readonly provider: LLMProvider;
   private readonly modelName: string;
   private readonly model: LanguageModel | null;
   private messages: CoreMessage[] = [];
+  private displayMessages: ChatDisplayMessage[] = [];
 
   constructor(webContents: WebContents, tabId: string) {
     this.webContents = webContents;
@@ -63,6 +86,14 @@ export class LLMClient {
     this.getWorkspaceTopic = resolver;
   }
 
+  setWorkspaceTabsResolver(resolver: () => TabSnapshot[]): void {
+    this.getWorkspaceTabs = resolver;
+  }
+
+  setEnsureBrowserTabResolver(resolver: (tabId: string) => Tab | null): void {
+    this.ensureBrowserTab = resolver;
+  }
+
   hydrateFromDatabase(excludeEventId?: number): void {
     const topic = this.getWorkspaceTopic?.();
     if (!topic) {
@@ -74,6 +105,11 @@ export class LLMClient {
       [topic],
     );
     this.messages = coreMessagesFromEventRows(
+      rows,
+      this.tabId,
+      excludeEventId,
+    );
+    this.displayMessages = displayMessagesFromEventRows(
       rows,
       this.tabId,
       excludeEventId,
@@ -138,40 +174,19 @@ export class LLMClient {
       if (this.messages.length === 0) {
         this.hydrateFromDatabase(eventId);
       }
-      let screenshot: string | null = null;
-      if (this.window) {
-        const activeTab = this.window.activeTab;
-        if (activeTab) {
-          try {
-            const image = await activeTab.screenshot();
-            screenshot = image.toDataURL();
-          } catch (error) {
-            console.error("Failed to capture screenshot:", error);
-          }
-        }
-      }
-
-      const userContent: any[] = [];
-
-      if (screenshot) {
-        userContent.push({
-          type: "image",
-          image: screenshot,
-        });
-      }
-
-      userContent.push({
-        type: "text",
-        text: request.message,
-      });
 
       const userMessage: CoreMessage = {
         role: "user",
-        content: userContent.length === 1 ? request.message : userContent,
+        content: request.message,
       };
 
       this.messages.push(userMessage);
-
+      this.displayMessages.push({
+        id: `${request.messageId}-user`,
+        role: "user",
+        content: request.message,
+        timestamp: Date.now(),
+      });
       this.sendMessagesToRenderer();
 
       if (!this.model) {
@@ -182,16 +197,22 @@ export class LLMClient {
         return;
       }
 
-      const messages = await this.prepareMessagesWithContext(request);
+      const messages = this.prepareMessagesWithContext();
       await this.streamResponse(messages, request.messageId, eventId);
     } catch (error) {
       console.error("Error in LLM request:", error);
-      this.handleStreamError(error, request.messageId, eventId);
+      this.handleStreamError(
+        error,
+        request.messageId,
+        eventId,
+        `${request.messageId}-assistant-0`,
+      );
     }
   }
 
   clearMessages(): void {
     this.messages = [];
+    this.displayMessages = [];
     this.sendMessagesToRenderer();
   }
 
@@ -199,63 +220,40 @@ export class LLMClient {
     return this.messages;
   }
 
-  private sendMessagesToRenderer(): void {
-    this.webContents.send("chat-messages-updated", this.messages);
+  getDisplayMessages(): ChatDisplayMessage[] {
+    return this.displayMessages;
   }
 
-  private async prepareMessagesWithContext(
-    _request: ChatRequest,
-  ): Promise<CoreMessage[]> {
-    let pageUrl: string | null = null;
-    let pageText: string | null = null;
+  private sendMessagesToRenderer(): void {
+    this.webContents.send("chat-messages-updated", this.displayMessages);
+  }
 
-    if (this.window) {
-      const activeTab = this.window.activeTab;
-      if (activeTab) {
-        pageUrl = activeTab.url;
-        try {
-          pageText = await activeTab.getTabText();
-        } catch (error) {
-          console.error("Failed to get page text:", error);
-        }
-      }
-    }
-
+  private prepareMessagesWithContext(): CoreMessage[] {
     const systemMessage: CoreMessage = {
       role: "system",
-      content: this.buildSystemPrompt(pageUrl, pageText),
+      content: loadAgentInstructions(),
     };
 
     return [systemMessage, ...this.messages];
   }
 
-  private buildSystemPrompt(url: string | null, pageText: string | null): string {
-    const parts: string[] = [
-      "You are a helpful AI assistant integrated into a web browser.",
-      "You can analyze and discuss web pages with the user.",
-      "The user's messages may include screenshots of the current page as the first image.",
-    ];
-
-    if (url) {
-      parts.push(`\nCurrent page URL: ${url}`);
+  private buildToolContext(): AgentToolContext | null {
+    if (!this.window) {
+      return null;
     }
 
-    if (pageText) {
-      const truncatedText = this.truncateText(pageText, MAX_CONTEXT_LENGTH);
-      parts.push(`\nPage content (text):\n${truncatedText}`);
+    const workspaceTopic = this.getWorkspaceTopic?.();
+    if (!workspaceTopic || !this.getWorkspaceTabs) {
+      return null;
     }
 
-    parts.push(
-      "\nPlease provide helpful, accurate, and contextual responses about the current webpage.",
-      "If the user asks about specific content, refer to the page content and/or screenshot provided.",
-    );
-
-    return parts.join("\n");
-  }
-
-  private truncateText(text: string, maxLength: number): string {
-    if (text.length <= maxLength) return text;
-    return text.substring(0, maxLength) + "...";
+    return {
+      window: this.window,
+      workspaceTopic,
+      currentChatTabId: this.tabId,
+      getWorkspaceTabs: this.getWorkspaceTabs,
+      ensureBrowserTab: this.ensureBrowserTab ?? undefined,
+    };
   }
 
   private async streamResponse(
@@ -267,73 +265,257 @@ export class LLMClient {
       throw new Error("Model not initialized");
     }
 
-    const result = await streamText({
-      model: this.model,
-      messages,
-      temperature: DEFAULT_TEMPERATURE,
-      maxRetries: 3,
-      abortSignal: undefined,
-    });
+    const toolContext = this.buildToolContext();
+    const tools = toolContext ? createAgentTools(toolContext) : undefined;
+    const turnStartIndex = this.displayMessages.length;
+    let errorAssistantDisplayId = `${messageId}-assistant-0`;
 
-    await this.processStream(result.textStream, messageId, eventId);
+    try {
+      const result = streamText({
+        model: this.model,
+        messages,
+        tools,
+        stopWhen: stepCountIs(MAX_AGENT_STEPS),
+        temperature: DEFAULT_TEMPERATURE,
+        maxRetries: 3,
+      });
+
+      errorAssistantDisplayId = await this.processAgentStream(
+        result.fullStream,
+        result.text,
+        messageId,
+        turnStartIndex,
+        eventId,
+      );
+    } catch (error) {
+      this.handleStreamError(
+        error,
+        messageId,
+        eventId,
+        errorAssistantDisplayId,
+      );
+    }
   }
 
-  private async processStream(
-    textStream: AsyncIterable<string>,
-    messageId: string,
-    eventId?: number,
-  ): Promise<void> {
-    let accumulatedText = "";
+  private syncTurnDisplay(
+    turnStartIndex: number,
+    turnItems: ChatDisplayMessage[],
+  ): void {
+    this.displayMessages = [
+      ...this.displayMessages.slice(0, turnStartIndex),
+      ...turnItems,
+    ];
+    this.sendMessagesToRenderer();
+  }
 
-    const assistantMessage: CoreMessage = {
-      role: "assistant",
-      content: "",
+  private removeEmptyTrailingAssistant(
+    turnItems: ChatDisplayMessage[],
+  ): void {
+    const last = turnItems[turnItems.length - 1];
+    if (last?.role === "assistant" && !last.content.trim()) {
+      turnItems.pop();
+    }
+  }
+
+  private async processAgentStream(
+    fullStream: AsyncIterable<{
+      type: string;
+      text?: string;
+      toolCallId?: string;
+      toolName?: string;
+      input?: unknown;
+      output?: unknown;
+      error?: unknown;
+    }>,
+    getFinalText: PromiseLike<string>,
+    messageId: string,
+    turnStartIndex: number,
+    eventId?: number,
+  ): Promise<string> {
+    const turnItems: ChatDisplayMessage[] = [];
+    let assistantSegmentIndex = 0;
+    let currentAssistantId: string | null = null;
+    let streamedText = "";
+
+    const getOrCreateAssistantSegment = (): AssistantDisplayMessage => {
+      const last = turnItems[turnItems.length - 1];
+      if (
+        currentAssistantId &&
+        last?.role === "assistant" &&
+        last.id === currentAssistantId
+      ) {
+        return last;
+      }
+
+      currentAssistantId = `${messageId}-assistant-${assistantSegmentIndex++}`;
+      const segment: AssistantDisplayMessage = {
+        id: currentAssistantId,
+        role: "assistant",
+        content: "",
+        timestamp: Date.now(),
+        isStreaming: true,
+      };
+      turnItems.push(segment);
+      return segment;
     };
 
-    const messageIndex = this.messages.length;
-    this.messages.push(assistantMessage);
+    const findToolMessage = (
+      toolCallId: string,
+    ): ToolDisplayMessage | undefined => {
+      const match = turnItems.find(
+        (message): message is ToolDisplayMessage =>
+          message.role === "tool" && message.id === toolCallId,
+      );
+      return match;
+    };
 
-    for await (const chunk of textStream) {
-      accumulatedText += chunk;
+    for await (const part of fullStream) {
+      switch (part.type) {
+        case "text-delta": {
+          if (!part.text) {
+            break;
+          }
 
-      this.messages[messageIndex] = {
+          const segment = getOrCreateAssistantSegment();
+          segment.content = sanitizeAssistantText(segment.content + part.text);
+          streamedText += part.text;
+          this.syncTurnDisplay(turnStartIndex, turnItems);
+          this.sendStreamChunk(messageId, {
+            content: part.text,
+            isComplete: false,
+          });
+          break;
+        }
+        case "tool-call": {
+          if (!part.toolCallId || !part.toolName) {
+            break;
+          }
+
+          currentAssistantId = null;
+          this.removeEmptyTrailingAssistant(turnItems);
+
+          const input =
+            typeof part.input === "object" && part.input !== null
+              ? (part.input as Record<string, unknown>)
+              : {};
+
+          turnItems.push({
+            id: part.toolCallId,
+            role: "tool",
+            toolName: part.toolName,
+            status: "running",
+            input,
+            summary: summarizeToolInput(part.toolName, input),
+            timestamp: Date.now(),
+          });
+          this.syncTurnDisplay(turnStartIndex, turnItems);
+          break;
+        }
+        case "tool-result": {
+          if (!part.toolCallId) {
+            break;
+          }
+
+          const toolMessage = findToolMessage(part.toolCallId);
+          if (!toolMessage) {
+            break;
+          }
+
+          applyToolResultToDisplayMessage(toolMessage, part.output);
+          currentAssistantId = null;
+          this.syncTurnDisplay(turnStartIndex, turnItems);
+          break;
+        }
+        case "tool-error": {
+          if (!part.toolCallId) {
+            break;
+          }
+
+          const toolMessage = findToolMessage(part.toolCallId);
+          if (!toolMessage) {
+            break;
+          }
+
+          toolMessage.status = "error";
+          toolMessage.error =
+            typeof part.error === "string"
+              ? part.error
+              : "Tool execution failed";
+          currentAssistantId = null;
+          this.syncTurnDisplay(turnStartIndex, turnItems);
+          break;
+        }
+        case "start-step": {
+          currentAssistantId = null;
+          break;
+        }
+      }
+    }
+
+    for (const item of turnItems) {
+      if (item.role === "assistant") {
+        item.isStreaming = false;
+      }
+    }
+
+    let finalText = streamedText;
+    if (!finalText) {
+      finalText = await getFinalText;
+    }
+    finalText = sanitizeAssistantText(finalText);
+
+    if (!streamedText && finalText) {
+      turnItems.push({
+        id: `${messageId}-assistant-${assistantSegmentIndex}`,
         role: "assistant",
-        content: accumulatedText,
-      };
-      this.sendMessagesToRenderer();
-
-      this.sendStreamChunk(messageId, {
-        content: chunk,
-        isComplete: false,
+        content: finalText,
+        timestamp: Date.now(),
+        isStreaming: false,
       });
     }
 
-    this.messages[messageIndex] = {
+    this.messages.push({
       role: "assistant",
-      content: accumulatedText,
-    };
-    this.sendMessagesToRenderer();
+      content: finalText,
+    });
 
-    this.persistResponse(eventId, messageId, accumulatedText);
-
+    this.syncTurnDisplay(turnStartIndex, turnItems);
+    this.persistTurn(eventId, messageId, finalText, turnItems);
     this.sendStreamChunk(messageId, {
-      content: accumulatedText,
+      content: finalText,
       isComplete: true,
     });
+
+    const lastAssistant = [...turnItems]
+      .reverse()
+      .find((item): item is AssistantDisplayMessage => item.role === "assistant");
+
+    return lastAssistant?.id ?? `${messageId}-assistant-0`;
   }
 
   private handleStreamError(
     error: unknown,
     messageId: string,
     eventId?: number,
+    assistantDisplayId?: string,
   ): void {
     console.error("Error streaming from LLM:", error);
 
     const errorMessage = this.getErrorMessage(error);
-    this.sendErrorMessage(messageId, errorMessage, eventId);
+    this.sendErrorMessage(
+      messageId,
+      errorMessage,
+      eventId,
+      assistantDisplayId,
+    );
   }
 
   private getErrorMessage(error: unknown): string {
+    const apiMessage = this.getApiErrorMessage(error);
+    if (apiMessage) {
+      return `API error: ${apiMessage}`;
+    }
+
     if (!(error instanceof Error)) {
       return "An unexpected error occurred. Please try again.";
     }
@@ -360,25 +542,91 @@ export class LLMClient {
       return "Request timeout: The service took too long to respond. Please try again.";
     }
 
+    if (error.message.trim()) {
+      return error.message;
+    }
+
     return "Sorry, I encountered an error while processing your request. Please try again.";
+  }
+
+  private getApiErrorMessage(error: unknown): string | null {
+    if (!error || typeof error !== "object" || !("data" in error)) {
+      return null;
+    }
+
+    const data = (error as { data?: unknown }).data;
+    if (!data || typeof data !== "object" || !("error" in data)) {
+      return null;
+    }
+
+    const apiError = (data as { error?: unknown }).error;
+    if (
+      apiError &&
+      typeof apiError === "object" &&
+      "message" in apiError &&
+      typeof apiError.message === "string"
+    ) {
+      return apiError.message;
+    }
+
+    return null;
   }
 
   private sendErrorMessage(
     messageId: string,
     errorMessage: string,
     eventId?: number,
+    assistantDisplayId?: string,
   ): void {
-    this.persistResponse(eventId, messageId, errorMessage);
+    const assistantDisplay = assistantDisplayId
+      ? this.displayMessages.find(
+          (message) => message.id === assistantDisplayId,
+        )
+      : undefined;
+
+    if (assistantDisplay?.role === "assistant") {
+      assistantDisplay.content = errorMessage;
+      assistantDisplay.isStreaming = false;
+      assistantDisplay.isError = true;
+    } else {
+      this.displayMessages.push({
+        id: `${messageId}-assistant-error`,
+        role: "assistant",
+        content: errorMessage,
+        timestamp: Date.now(),
+        isError: true,
+      });
+    }
+
+    this.sendMessagesToRenderer();
+    this.persistTurn(
+      eventId,
+      messageId,
+      errorMessage,
+      this.getPersistedTurnItems(messageId),
+    );
     this.sendStreamChunk(messageId, {
       content: errorMessage,
       isComplete: true,
     });
   }
 
-  private persistResponse(
+  private getPersistedTurnItems(messageId: string): ChatDisplayMessage[] {
+    const userIndex = this.displayMessages.findIndex(
+      (message) => message.id === `${messageId}-user`,
+    );
+    if (userIndex < 0) {
+      return [];
+    }
+
+    return this.displayMessages.slice(userIndex + 1);
+  }
+
+  private persistTurn(
     eventId: number | undefined,
     messageId: string,
     response: string,
+    turnItems: ChatDisplayMessage[],
   ): void {
     if (eventId === undefined) {
       return;
@@ -400,6 +648,7 @@ export class LLMClient {
         tabId: parsed.tabId || this.tabId,
         messageId: parsed.messageId || messageId,
         response,
+        turnItems: serializeTurnItems(turnItems),
       });
     } catch (error) {
       console.error("Failed to persist agent chat response:", error);

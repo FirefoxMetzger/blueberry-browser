@@ -2,17 +2,11 @@ import React, { useState, useRef, useEffect, useLayoutEffect } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkBreaks from 'remark-breaks'
-import { ArrowUp } from 'lucide-react'
-import { useChat } from '../contexts/ChatContext'
+import { ArrowUp, Camera, ChevronDown, LayoutList, Loader2, MessageSquare, Search, Wrench } from 'lucide-react'
+import { useChat, type Message } from '../contexts/ChatContext'
+import type { GrepMatchCard, ListTabCard } from '../../../displayMessages'
+import { Favicon } from './Favicon'
 import { cn } from '../lib/utils'
-
-interface Message {
-    id: string
-    role: 'user' | 'assistant'
-    content: string
-    timestamp: number
-    isStreaming?: boolean
-}
 
 // Auto-scroll hook
 const useAutoScroll = (messages: Message[]) => {
@@ -85,7 +79,6 @@ const Markdown: React.FC<{ content: string }> = ({ content }) => (
         <ReactMarkdown
             remarkPlugins={[remarkGfm, remarkBreaks]}
             components={{
-                // Custom code block styling
                 code: ({ className, children, ...props }) => {
                     const inline = !className
                     return inline ? (
@@ -98,7 +91,6 @@ const Markdown: React.FC<{ content: string }> = ({ content }) => (
                         </code>
                     )
                 },
-                // Custom link styling
                 a: ({ children, href }) => (
                     <a
                         href={href}
@@ -117,20 +109,283 @@ const Markdown: React.FC<{ content: string }> = ({ content }) => (
 )
 
 // Assistant Message Component - appears on the left
-const AssistantMessage: React.FC<{ content: string; isStreaming?: boolean }> = ({
-    content,
-    isStreaming
-}) => (
-    <div className="relative w-full animate-fade-in">
-        <div className="py-1">
-            {isStreaming ? (
-                <StreamingText content={content} />
+const AssistantMessage: React.FC<{
+    content: string
+    isStreaming?: boolean
+    isError?: boolean
+}> = ({ content, isStreaming, isError }) => {
+    if (!content.trim()) {
+        return null
+    }
+
+    return (
+        <div className="relative w-full animate-fade-in">
+            <div className={cn(
+                "py-1",
+                isError && "rounded-2xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive"
+            )}>
+                {isStreaming ? (
+                    <StreamingText content={content} />
+                ) : isError ? (
+                    <div className="whitespace-pre-wrap">{content}</div>
+                ) : (
+                    <Markdown content={content} />
+                )}
+            </div>
+        </div>
+    )
+}
+
+const toolIcon = (toolName: string) => {
+    switch (toolName) {
+        case 'list_tabs':
+            return LayoutList
+        case 'grep':
+            return Search
+        case 'screenshot':
+            return Camera
+        default:
+            return Wrench
+    }
+}
+
+const getTabFavicon = (url: string): string | null => {
+    try {
+        const domain = new URL(url).hostname
+        return `https://www.google.com/s2/favicons?domain=${domain}&sz=32`
+    } catch {
+        return null
+    }
+}
+
+const formatTabUrl = (tab: ListTabCard): string => {
+    if (tab.kind === 'agent-chat') {
+        return 'Agent chat'
+    }
+    if (!tab.url || tab.url === 'no URL') {
+        return 'no URL'
+    }
+    return tab.url
+}
+
+const ListTabCardButton: React.FC<{ tab: ListTabCard }> = ({ tab }) => (
+    <button
+        type="button"
+        onClick={(event) => {
+            event.stopPropagation()
+            void window.agentChatAPI.switchTab(tab.id)
+        }}
+        className={cn(
+            'w-full rounded-xl border px-3 py-2.5 text-left transition-colors',
+            'hover:bg-muted/60 dark:hover:bg-muted/40',
+            tab.isActive
+                ? 'border-primary/30 bg-background'
+                : 'border-border/60 bg-background/80',
+        )}
+    >
+        <div className="flex min-w-0 items-center gap-2">
+            {tab.kind === 'agent-chat' ? (
+                <MessageSquare className="size-4 shrink-0 text-muted-foreground" />
             ) : (
-                <Markdown content={content} />
+                <Favicon src={getTabFavicon(tab.url)} />
             )}
+            <span className="truncate text-sm font-medium text-foreground">
+                {tab.title || 'Untitled'}
+            </span>
+        </div>
+        <div className="mt-1 truncate pl-6 text-xs text-muted-foreground">
+            {formatTabUrl(tab)}
+        </div>
+    </button>
+)
+
+const formatGrepMatchSubtitle = (match: GrepMatchCard): string => {
+    if (match.sourceType === 'agent-chat') {
+        return `Agent chat · line ${match.lineNumber}`
+    }
+    if (!match.url || match.url === 'no URL') {
+        return `line ${match.lineNumber}`
+    }
+    return `${match.url} · line ${match.lineNumber}`
+}
+
+const truncateLineText = (text: string, maxLength = 120): string => {
+    const trimmed = text.trim()
+    if (trimmed.length <= maxLength) {
+        return trimmed
+    }
+    return `${trimmed.slice(0, maxLength)}…`
+}
+
+const GrepMatchCardButton: React.FC<{ match: GrepMatchCard }> = ({ match }) => (
+    <button
+        type="button"
+        onClick={(event) => {
+            event.stopPropagation()
+            void window.agentChatAPI.navigateGrepMatch({
+                tabId: match.tabId,
+                sourceType: match.sourceType,
+                pattern: match.pattern,
+                caseInsensitive: match.caseInsensitive,
+                lineText: match.lineText,
+                lineNumber: match.lineNumber,
+            })
+        }}
+        className={cn(
+            'w-full rounded-xl border border-border/60 bg-background/80 px-3 py-2.5 text-left transition-colors',
+            'hover:bg-muted/60 dark:hover:bg-muted/40',
+        )}
+    >
+        <div className="flex min-w-0 items-center gap-2">
+            {match.sourceType === 'agent-chat' ? (
+                <MessageSquare className="size-4 shrink-0 text-muted-foreground" />
+            ) : (
+                <Favicon src={match.url ? getTabFavicon(match.url) : null} />
+            )}
+            <span className="truncate text-sm font-medium text-foreground">
+                {match.title || 'Untitled'}
+            </span>
+            <span className="shrink-0 rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                L{match.lineNumber}
+            </span>
+        </div>
+        <div className="mt-1 truncate pl-6 text-xs text-muted-foreground">
+            {formatGrepMatchSubtitle(match)}
+        </div>
+        {match.lineText.trim() && (
+            <div className="mt-1.5 truncate pl-6 font-mono text-xs text-foreground/80">
+                {truncateLineText(match.lineText)}
+            </div>
+        )}
+    </button>
+)
+
+const GrepMatchCards: React.FC<{ matches: GrepMatchCard[] }> = ({ matches }) => (
+    <div className="max-h-96 space-y-2 overflow-y-auto">
+        {matches.map((match) => (
+            <GrepMatchCardButton key={match.id} match={match} />
+        ))}
+    </div>
+)
+
+const ListTabsCards: React.FC<{ tabs: ListTabCard[] }> = ({ tabs }) => (
+    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        {tabs.map((tab) => (
+            <ListTabCardButton key={tab.id} tab={tab} />
+        ))}
+    </div>
+)
+
+const CollapsibleToolBody: React.FC<{
+    isExpanded: boolean
+    children: React.ReactNode
+}> = ({ isExpanded, children }) => (
+    <div
+        className={cn(
+            'grid transition-[grid-template-rows] duration-200 ease-out',
+            isExpanded ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]',
+        )}
+    >
+        <div className="min-h-0 overflow-hidden">
+            <div
+                className={cn(
+                    'border-t border-border/70 px-3 pb-3 pt-2 transition-opacity duration-200 ease-out',
+                    isExpanded ? 'opacity-100' : 'opacity-0',
+                )}
+            >
+                {children}
+            </div>
         </div>
     </div>
 )
+
+const ToolMessage: React.FC<{ message: Extract<Message, { role: 'tool' }> }> = ({ message }) => {
+    const Icon = toolIcon(message.toolName)
+    const isRunning = message.status === 'running'
+    const isError = message.status === 'error'
+    const showScreenshotPreview =
+        message.toolName === 'screenshot' &&
+        message.status === 'complete' &&
+        Boolean(message.previewImageUrl)
+    const showListTabsCards =
+        message.toolName === 'list_tabs' &&
+        message.status === 'complete' &&
+        Boolean(message.tabCards?.length)
+    const showGrepMatchCards =
+        message.toolName === 'grep' &&
+        message.status === 'complete' &&
+        Boolean(message.grepMatches?.length)
+    const hasCollapsibleBody = showListTabsCards || showScreenshotPreview || showGrepMatchCards
+    const [isExpanded, setIsExpanded] = useState(true)
+
+    return (
+        <div className="animate-fade-in">
+            <div className={cn(
+                "rounded-2xl border text-sm",
+                isError
+                    ? "border-destructive/30 bg-destructive/5"
+                    : "border-border/70 bg-muted/30 dark:bg-muted/20"
+            )}>
+                <div
+                    className={cn(
+                        'flex items-center gap-2 px-4 py-3 text-foreground',
+                        hasCollapsibleBody && 'cursor-pointer hover:bg-muted/20 dark:hover:bg-muted/30',
+                    )}
+                    onClick={hasCollapsibleBody ? () => setIsExpanded((open) => !open) : undefined}
+                    onKeyDown={
+                        hasCollapsibleBody
+                            ? (event) => {
+                                if (event.key === 'Enter' || event.key === ' ') {
+                                    event.preventDefault()
+                                    setIsExpanded((open) => !open)
+                                }
+                            }
+                            : undefined
+                    }
+                    role={hasCollapsibleBody ? 'button' : undefined}
+                    aria-expanded={hasCollapsibleBody ? isExpanded : undefined}
+                    tabIndex={hasCollapsibleBody ? 0 : undefined}
+                >
+                    {isRunning ? (
+                        <Loader2 className="size-4 shrink-0 animate-spin text-primary" />
+                    ) : (
+                        <Icon className="size-4 shrink-0 text-muted-foreground" />
+                    )}
+                    <span className="font-medium">{message.toolName}</span>
+                    <span className="text-muted-foreground">·</span>
+                    <span className="min-w-0 flex-1 truncate text-muted-foreground">
+                        {isError ? message.error : message.summary}
+                    </span>
+                    {hasCollapsibleBody && (
+                        <ChevronDown
+                            className={cn(
+                                'size-4 shrink-0 text-muted-foreground transition-transform duration-200 ease-out',
+                                !isExpanded && '-rotate-90',
+                            )}
+                        />
+                    )}
+                </div>
+                {hasCollapsibleBody && (
+                    <CollapsibleToolBody isExpanded={isExpanded}>
+                        {showListTabsCards && message.tabCards && (
+                            <ListTabsCards tabs={message.tabCards} />
+                        )}
+                        {showGrepMatchCards && message.grepMatches && (
+                            <GrepMatchCards matches={message.grepMatches} />
+                        )}
+                        {showScreenshotPreview && (
+                            <img
+                                src={message.previewImageUrl}
+                                alt={message.summary ?? 'Screenshot'}
+                                className="max-h-80 w-full rounded-lg border border-border/50 bg-background object-contain"
+                            />
+                        )}
+                    </CollapsibleToolBody>
+                )}
+            </div>
+        </div>
+    )
+}
 
 // Loading Indicator with spinning star
 const LoadingIndicator: React.FC = () => {
@@ -159,12 +414,11 @@ const ChatInput: React.FC<{
     const [isFocused, setIsFocused] = useState(false)
     const textareaRef = useRef<HTMLTextAreaElement>(null)
 
-    // Auto-resize textarea
     useEffect(() => {
         if (textareaRef.current) {
             textareaRef.current.style.height = 'auto'
             const scrollHeight = textareaRef.current.scrollHeight
-            const newHeight = Math.min(scrollHeight, 200) // Max 200px
+            const newHeight = Math.min(scrollHeight, 200)
             textareaRef.current.style.height = `${newHeight}px`
         }
     }, [value])
@@ -173,7 +427,6 @@ const ChatInput: React.FC<{
         if (value.trim() && !disabled) {
             onSend(value.trim())
             setValue('')
-            // Reset textarea height
             if (textareaRef.current) {
                 textareaRef.current.style.height = '24px'
             }
@@ -193,7 +446,6 @@ const ChatInput: React.FC<{
             "shadow-chat animate-spring-scale outline-none transition-all duration-200",
             isFocused ? "border-primary/20 dark:border-primary/30" : "border-border"
         )}>
-            {/* Input Area */}
             <div className="w-full px-3 py-2">
                 <div className="w-full flex items-start gap-3">
                     <div className="relative flex-1 overflow-hidden">
@@ -215,7 +467,6 @@ const ChatInput: React.FC<{
                 </div>
             </div>
 
-            {/* Send Button */}
             <div className="w-full flex items-center gap-1.5 px-1 mt-2 mb-1">
                 <div className="flex-1" />
                 <button
@@ -235,24 +486,33 @@ const ChatInput: React.FC<{
     )
 }
 
-// Conversation Turn Component
 interface ConversationTurn {
-    user?: Message
-    assistant?: Message
+    user?: Extract<Message, { role: 'user' }>
+    items: Message[]
 }
 
 const ConversationTurnComponent: React.FC<{
     turn: ConversationTurn
     isLoading?: boolean
 }> = ({ turn, isLoading }) => (
-    <div className="pt-12 flex flex-col gap-8">
+    <div className="pt-12 flex flex-col gap-4">
         {turn.user && <UserMessage content={turn.user.content} />}
-        {turn.assistant && (
-            <AssistantMessage
-                content={turn.assistant.content}
-                isStreaming={turn.assistant.isStreaming}
-            />
-        )}
+        {turn.items.map((item) => {
+            if (item.role === 'tool') {
+                return <ToolMessage key={item.id} message={item} />
+            }
+            if (item.role === 'assistant') {
+                return (
+                    <AssistantMessage
+                        key={item.id}
+                        content={item.content}
+                        isStreaming={item.isStreaming}
+                        isError={item.role === 'assistant' ? item.isError : undefined}
+                    />
+                )
+            }
+            return null
+        })}
         {isLoading && (
             <div className="flex justify-start">
                 <LoadingIndicator />
@@ -261,40 +521,43 @@ const ConversationTurnComponent: React.FC<{
     </div>
 )
 
+function groupConversationTurns(messages: Message[]): ConversationTurn[] {
+    const turns: ConversationTurn[] = []
+    let currentTurn: ConversationTurn | null = null
+
+    for (const message of messages) {
+        if (message.role === 'user') {
+            currentTurn = { user: message, items: [] }
+            turns.push(currentTurn)
+            continue
+        }
+
+        if (!currentTurn) {
+            currentTurn = { items: [] }
+            turns.push(currentTurn)
+        }
+
+        currentTurn.items.push(message)
+    }
+
+    return turns
+}
+
 // Main Chat Component
 export const Chat: React.FC = () => {
     const { messages, isLoading, sendMessage } = useChat()
     const scrollRef = useAutoScroll(messages)
+    const conversationTurns = groupConversationTurns(messages)
 
-    // Group messages into conversation turns
-    const conversationTurns: ConversationTurn[] = []
-    for (let i = 0; i < messages.length; i++) {
-        if (messages[i].role === 'user') {
-            const turn: ConversationTurn = { user: messages[i] }
-            if (messages[i + 1]?.role === 'assistant') {
-                turn.assistant = messages[i + 1]
-                i++ // Skip next message since we've paired it
-            }
-            conversationTurns.push(turn)
-        } else if (messages[i].role === 'assistant' &&
-            (i === 0 || messages[i - 1]?.role !== 'user')) {
-            // Handle standalone assistant messages
-            conversationTurns.push({ assistant: messages[i] })
-        }
-    }
-
-    // Check if we need to show loading after the last turn
     const showLoadingAfterLastTurn = isLoading &&
         messages[messages.length - 1]?.role === 'user'
 
     return (
         <div className="flex flex-col h-full bg-background">
-            {/* Messages Area */}
             <div className="flex-1 overflow-y-auto">
                 <div className="pb-4 relative max-w-3xl mx-auto px-4">
 
                     {messages.length === 0 ? (
-                        // Empty State
                         <div className="flex items-center justify-center h-full min-h-[400px]">
                             <div className="text-center animate-fade-in max-w-md mx-auto gap-2 flex flex-col">
                                 <h3 className="text-2xl font-bold">🫐</h3>
@@ -304,28 +567,22 @@ export const Chat: React.FC = () => {
                             </div>
                         </div>
                     ) : (
-                        <>
-
-                            {/* Render conversation turns */}
-                            {conversationTurns.map((turn, index) => (
-                                <ConversationTurnComponent
-                                    key={`turn-${index}`}
-                                    turn={turn}
-                                    isLoading={
-                                        showLoadingAfterLastTurn &&
-                                        index === conversationTurns.length - 1
-                                    }
-                                />
-                            ))}
-                        </>
+                        conversationTurns.map((turn, index) => (
+                            <ConversationTurnComponent
+                                key={`turn-${index}`}
+                                turn={turn}
+                                isLoading={
+                                    showLoadingAfterLastTurn &&
+                                    index === conversationTurns.length - 1
+                                }
+                            />
+                        ))
                     )}
 
-                    {/* Scroll anchor */}
                     <div ref={scrollRef} />
                 </div>
             </div>
 
-            {/* Input Area */}
             <div className="p-4">
                 <ChatInput onSend={sendMessage} disabled={isLoading} />
             </div>

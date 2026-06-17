@@ -9,6 +9,10 @@ import {
 import type { Window } from "../main/Window";
 import type { AgentChatView } from "../agentChat/main";
 import type { WorkspaceManager } from "../workspaces/WorkspaceManager";
+import {
+  buildGrepHighlightScript,
+  type GrepNavigationRequest,
+} from "../agentChat/grepNavigation";
 import { DEFAULT_WORKSPACE_TOPIC, workspaceTopic } from "../workspaces/types";
 import { eventDatabase } from "./database";
 import type { Event } from "./types";
@@ -247,6 +251,68 @@ export class EventManager {
       "switch-tab",
       (_, id: string) => {
         this.workspaceManager.switchTab(windowId(), id);
+      },
+      { topic: tabWorkspaceTopic },
+    );
+
+    this.handle(
+      "navigate-grep-match",
+      async (_, request: GrepNavigationRequest) => {
+        const { tabId, sourceType, pattern, caseInsensitive, lineText } =
+          request;
+        const wid = windowId();
+
+        const switched = this.workspaceManager.switchTab(wid, tabId);
+        if (!switched) {
+          return { success: false, switched: false, highlighted: false };
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, 200));
+
+        const script = buildGrepHighlightScript({
+          pattern,
+          caseInsensitive,
+          lineText,
+        });
+
+        if (sourceType === "agent-chat") {
+          const chat = this.mainWindow.getAgentChat(tabId);
+          if (!chat) {
+            return { success: true, switched: true, highlighted: false };
+          }
+
+          const result = await chat.view.webContents.executeJavaScript(script);
+          return {
+            success: true,
+            switched: true,
+            highlighted: Boolean(
+              result &&
+                typeof result === "object" &&
+                "success" in result &&
+                result.success,
+            ),
+          };
+        }
+
+        let tab = this.mainWindow.getTab(tabId);
+        if (!tab) {
+          tab = this.workspaceManager.ensureBrowserTabMaterialized(wid, tabId);
+        }
+        if (!tab) {
+          return { success: true, switched: true, highlighted: false };
+        }
+
+        const result = await tab.runJs(script);
+        return {
+          success: true,
+          switched: true,
+          highlighted: Boolean(
+            result &&
+              typeof result === "object" &&
+              "success" in result &&
+              result.success,
+          ),
+        };
       },
       { topic: tabWorkspaceTopic },
     );
@@ -714,13 +780,7 @@ export class EventManager {
   }
 
   private ensureAgentChatConfigured(chat: AgentChatView): void {
-    chat.client.setWorkspaceTopicResolver(
-      () =>
-        this.workspaceManager.getTabWorkspaceTopic(
-          this.mainWindow.id,
-          chat.id,
-        ) ?? this.getActiveWorkspaceTopic(),
-    );
+    this.workspaceManager.configureAgentChatClient(this.mainWindow.id, chat.id);
   }
 
   private handlePageContentEvents(): void {

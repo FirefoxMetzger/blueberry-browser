@@ -57,6 +57,16 @@ const agentChatAPI = {
   getPageText: () => electronAPI.ipcRenderer.invoke("get-page-text"),
   getCurrentUrl: () => electronAPI.ipcRenderer.invoke("get-current-url"),
   getActiveTabInfo: () => electronAPI.ipcRenderer.invoke("get-active-tab-info"),
+  switchTab: (tabId: string) =>
+    electronAPI.ipcRenderer.invoke("switch-tab", tabId),
+  navigateGrepMatch: (request: {
+    tabId: string;
+    sourceType: "browser-tab" | "agent-chat";
+    pattern: string;
+    caseInsensitive: boolean;
+    lineText: string;
+    lineNumber: number;
+  }) => electronAPI.ipcRenderer.invoke("navigate-grep-match", request),
 };
 
 if (process.contextIsolated) {

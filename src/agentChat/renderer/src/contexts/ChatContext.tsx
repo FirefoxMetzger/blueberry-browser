@@ -1,17 +1,14 @@
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react'
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react'
 import { AGENT_CHAT_MESSAGES_QUERY } from '../../../../events/queries'
 import {
-    chatMessagesFromEventRows,
+    displayMessagesFromEventRows,
     type AgentChatEventRow,
-    type StoredChatMessage,
 } from '../../../chatHistory'
+import { sanitizeAssistantText, type ChatDisplayMessage } from '../../../displayMessages'
 
-interface Message {
-    id: string
-    role: 'user' | 'assistant'
-    content: string
-    timestamp: number
+export type Message = ChatDisplayMessage & {
     isStreaming?: boolean
+    isError?: boolean
 }
 
 interface ChatContextType {
@@ -29,13 +26,20 @@ interface ChatContextType {
 
 const ChatContext = createContext<ChatContextType | null>(null)
 
-const toDisplayMessage = (message: StoredChatMessage): Message => ({
-    id: message.id,
-    role: message.role,
-    content: message.content,
-    timestamp: message.timestamp,
-    isStreaming: false,
-})
+const isDisplayMessage = (value: unknown): value is Message => {
+    if (!value || typeof value !== 'object') {
+        return false
+    }
+
+    const message = value as Record<string, unknown>
+    return (
+        typeof message.id === 'string' &&
+        typeof message.role === 'string' &&
+        (message.role === 'user' ||
+            message.role === 'assistant' ||
+            message.role === 'tool')
+    )
+}
 
 export const useChat = () => {
     const context = useContext(ChatContext)
@@ -48,11 +52,14 @@ export const useChat = () => {
 export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [messages, setMessages] = useState<Message[]>([])
     const [isLoading, setIsLoading] = useState(false)
+    const historyLoadGeneration = useRef(0)
 
     const loadMessagesFromEventLog = useCallback(async (): Promise<void> => {
+        const loadId = ++historyLoadGeneration.current
+
         try {
             const chatContext = await window.agentChatAPI.getChatContext()
-            if (!chatContext) {
+            if (!chatContext || loadId !== historyLoadGeneration.current) {
                 return
             }
 
@@ -61,12 +68,16 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 [chatContext.topic]
             )
 
-            const storedMessages = chatMessagesFromEventRows(
+            if (loadId !== historyLoadGeneration.current) {
+                return
+            }
+
+            const storedMessages = displayMessagesFromEventRows(
                 rows as AgentChatEventRow[],
                 chatContext.tabId
             )
 
-            setMessages(storedMessages.map(toDisplayMessage))
+            setMessages(storedMessages)
         } catch (error) {
             console.error('Failed to load messages:', error)
         }
@@ -78,6 +89,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }, [loadMessagesFromEventLog])
 
     const sendMessage = useCallback(async (content: string) => {
+        historyLoadGeneration.current += 1
         setIsLoading(true)
 
         try {
@@ -92,7 +104,6 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
             // Messages will be updated via the chat-messages-updated event
         } catch (error) {
             console.error('Failed to send message:', error)
-        } finally {
             setIsLoading(false)
         }
     }, [])
@@ -134,16 +145,19 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
 
         // Listen for message updates from main process
-        const handleMessagesUpdated = (updatedMessages: any[]) => {
-            const convertedMessages = updatedMessages.map((msg: any, index: number) => ({
-                id: `msg-${index}`,
-                role: msg.role,
-                content: typeof msg.content === 'string' 
-                    ? msg.content 
-                    : msg.content.find((p: any) => p.type === 'text')?.text || '',
-                timestamp: Date.now(),
-                isStreaming: false
-            }))
+        const handleMessagesUpdated = (updatedMessages: unknown[]) => {
+            historyLoadGeneration.current += 1
+            const convertedMessages = updatedMessages
+                .filter(isDisplayMessage)
+                .map((message) => {
+                    if (message.role === 'assistant') {
+                        return {
+                            ...message,
+                            content: sanitizeAssistantText(message.content),
+                        }
+                    }
+                    return message
+                })
             setMessages(convertedMessages)
         }
 
