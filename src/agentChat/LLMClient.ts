@@ -4,9 +4,8 @@ import { openai } from "@ai-sdk/openai";
 import { anthropic } from "@ai-sdk/anthropic";
 import * as dotenv from "dotenv";
 import { join } from "path";
-import type { Window } from "./Window";
+import type { Window } from "../main/Window";
 
-// Load environment variables from .env file
 dotenv.config({ path: join(__dirname, "../../.env") });
 
 interface ChatRequest {
@@ -46,7 +45,6 @@ export class LLMClient {
     this.logInitializationStatus();
   }
 
-  // Set the window reference after construction to avoid circular dependencies
   setWindow(window: Window): void {
     this.window = window;
   }
@@ -54,7 +52,7 @@ export class LLMClient {
   private getProvider(): LLMProvider {
     const provider = process.env.LLM_PROVIDER?.toLowerCase();
     if (provider === "anthropic") return "anthropic";
-    return "openai"; // Default to OpenAI
+    return "openai";
   }
 
   private getModelName(): string {
@@ -89,21 +87,20 @@ export class LLMClient {
   private logInitializationStatus(): void {
     if (this.model) {
       console.log(
-        `✅ LLM Client initialized with ${this.provider} provider using model: ${this.modelName}`
+        `✅ LLM Client initialized with ${this.provider} provider using model: ${this.modelName}`,
       );
     } else {
       const keyName =
         this.provider === "anthropic" ? "ANTHROPIC_API_KEY" : "OPENAI_API_KEY";
       console.error(
         `❌ LLM Client initialization failed: ${keyName} not found in environment variables.\n` +
-          `Please add your API key to the .env file in the project root.`
+          `Please add your API key to the .env file in the project root.`,
       );
     }
   }
 
   async sendChatMessage(request: ChatRequest): Promise<void> {
     try {
-      // Get screenshot from active tab if available
       let screenshot: string | null = null;
       if (this.window) {
         const activeTab = this.window.activeTab;
@@ -117,38 +114,33 @@ export class LLMClient {
         }
       }
 
-      // Build user message content with screenshot first, then text
       const userContent: any[] = [];
-      
-      // Add screenshot as the first part if available
+
       if (screenshot) {
         userContent.push({
           type: "image",
           image: screenshot,
         });
       }
-      
-      // Add text content
+
       userContent.push({
         type: "text",
         text: request.message,
       });
 
-      // Create user message in CoreMessage format
       const userMessage: CoreMessage = {
         role: "user",
         content: userContent.length === 1 ? request.message : userContent,
       };
-      
+
       this.messages.push(userMessage);
 
-      // Send updated messages to renderer
       this.sendMessagesToRenderer();
 
       if (!this.model) {
         this.sendErrorMessage(
           request.messageId,
-          "LLM service is not configured. Please add your API key to the .env file."
+          "LLM service is not configured. Please add your API key to the .env file.",
         );
         return;
       }
@@ -174,11 +166,12 @@ export class LLMClient {
     this.webContents.send("chat-messages-updated", this.messages);
   }
 
-  private async prepareMessagesWithContext(_request: ChatRequest): Promise<CoreMessage[]> {
-    // Get page context from active tab
+  private async prepareMessagesWithContext(
+    _request: ChatRequest,
+  ): Promise<CoreMessage[]> {
     let pageUrl: string | null = null;
     let pageText: string | null = null;
-    
+
     if (this.window) {
       const activeTab = this.window.activeTab;
       if (activeTab) {
@@ -191,13 +184,11 @@ export class LLMClient {
       }
     }
 
-    // Build system message
     const systemMessage: CoreMessage = {
       role: "system",
       content: this.buildSystemPrompt(pageUrl, pageText),
     };
 
-    // Include all messages in history (system + conversation)
     return [systemMessage, ...this.messages];
   }
 
@@ -219,7 +210,7 @@ export class LLMClient {
 
     parts.push(
       "\nPlease provide helpful, accurate, and contextual responses about the current webpage.",
-      "If the user asks about specific content, refer to the page content and/or screenshot provided."
+      "If the user asks about specific content, refer to the page content and/or screenshot provided.",
     );
 
     return parts.join("\n");
@@ -232,47 +223,40 @@ export class LLMClient {
 
   private async streamResponse(
     messages: CoreMessage[],
-    messageId: string
+    messageId: string,
   ): Promise<void> {
     if (!this.model) {
       throw new Error("Model not initialized");
     }
 
-    try {
-      const result = await streamText({
-        model: this.model,
-        messages,
-        temperature: DEFAULT_TEMPERATURE,
-        maxRetries: 3,
-        abortSignal: undefined, // Could add abort controller for cancellation
-      });
+    const result = await streamText({
+      model: this.model,
+      messages,
+      temperature: DEFAULT_TEMPERATURE,
+      maxRetries: 3,
+      abortSignal: undefined,
+    });
 
-      await this.processStream(result.textStream, messageId);
-    } catch (error) {
-      throw error; // Re-throw to be handled by the caller
-    }
+    await this.processStream(result.textStream, messageId);
   }
 
   private async processStream(
     textStream: AsyncIterable<string>,
-    messageId: string
+    messageId: string,
   ): Promise<void> {
     let accumulatedText = "";
 
-    // Create a placeholder assistant message
     const assistantMessage: CoreMessage = {
       role: "assistant",
       content: "",
     };
-    
-    // Keep track of the index for updates
+
     const messageIndex = this.messages.length;
     this.messages.push(assistantMessage);
 
     for await (const chunk of textStream) {
       accumulatedText += chunk;
 
-      // Update assistant message content
       this.messages[messageIndex] = {
         role: "assistant",
         content: accumulatedText,
@@ -285,14 +269,12 @@ export class LLMClient {
       });
     }
 
-    // Final update with complete content
     this.messages[messageIndex] = {
       role: "assistant",
       content: accumulatedText,
     };
     this.sendMessagesToRenderer();
 
-    // Send the final complete signal
     this.sendStreamChunk(messageId, {
       content: accumulatedText,
       isComplete: true,

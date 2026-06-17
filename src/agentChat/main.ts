@@ -1,7 +1,7 @@
 import { is } from "@electron-toolkit/utils";
 import { BaseWindow, WebContentsView } from "electron";
 import { join } from "path";
-import { LLMClient } from "../main/LLMClient";
+import { LLMClient } from "./LLMClient";
 import { TOPBAR_BASE_HEIGHT } from "../topBar/layout";
 
 export class AgentChatView {

@@ -4,6 +4,9 @@
     "electron.vite.config.*",
     "src/main/**/*",
     "src/menuBar/**/*",
+    "src/agentChat/LLMClient.ts",
+    "src/browserTab/Tab.ts",
+    "src/browserTab/types.ts",
     "src/*/main*.ts",
     "src/*/preload*.ts"
   ],
