@@ -20,6 +20,11 @@ import {
   type WorkspaceState,
   workspaceTopic,
 } from "./types";
+import {
+  createWorkspaceContextDirs,
+  deleteWorkspaceContextDirs,
+  isValidWorkspaceDirName,
+} from "./workspaceContextDirs";
 
 const WORKSPACE_EVENTS_QUERY = `
   SELECT topic, payload_type, payload
@@ -440,8 +445,14 @@ export class WorkspaceManager {
       return null;
     }
 
+    if (!isValidWorkspaceDirName(trimmed)) {
+      return null;
+    }
+
     const workspaceId = createWorkspaceId();
     const topic = workspaceTopic(trimmed);
+
+    createWorkspaceContextDirs(trimmed);
 
     this.publishDomainEvent(topic, "workspace-created", {
       workspaceId,
@@ -468,6 +479,8 @@ export class WorkspaceManager {
       return false;
     }
 
+    const workspaceName = workspace.name;
+
     this.publishDomainEvent(workspace.topic, "workspace-removed", {
       workspaceId,
     });
@@ -482,6 +495,8 @@ export class WorkspaceManager {
         window.destroyTabView(tabId);
       }
     }
+
+    deleteWorkspaceContextDirs(workspaceName);
 
     this.notifyStateChanged();
     return true;
