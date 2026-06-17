@@ -53,6 +53,8 @@ interface TopBarAPI {
   removeWorkspaceStateUpdatedListener: () => void;
   onWorkspaceCreateRequested: (callback: () => void) => void;
   removeWorkspaceCreateRequestedListener: () => void;
+  onFocusAddressBar: (callback: () => void) => void;
+  removeFocusAddressBarListener: () => void;
 
   navigateTab: (tabId: string, url: string) => Promise<void>;
   goBack: (tabId: string) => Promise<void>;

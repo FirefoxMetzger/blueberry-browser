@@ -20,6 +20,7 @@ interface ContextDashboardAPI {
   removeEventListener: () => void;
   onWorkspaceContextUpdated: (callback: (context: WorkspaceContext) => void) => void;
   removeWorkspaceContextUpdatedListener: () => void;
+  switchTab: (tabId: string) => Promise<boolean>;
 }
 
 declare global {

@@ -2,6 +2,13 @@ export const DEFAULT_WORKSPACE_TOPIC = "default";
 
 export const PENDING_TAB_URL = "about:blank";
 
+export function isBlankTabUrl(url: string | undefined): boolean {
+  if (!url) {
+    return true;
+  }
+  return url === PENDING_TAB_URL || url === "about:blank";
+}
+
 export type TabKind = "browser" | "agent-chat" | "pending";
 
 export interface WorkspaceInfo {

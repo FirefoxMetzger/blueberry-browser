@@ -4,6 +4,7 @@ import {
   type ChatDisplayMessage,
   type GrepMatchCard,
   type ListTabCard,
+  type ReadTabCard,
   type ToolDisplayMessage,
 } from "./displayMessages";
 
@@ -45,6 +46,7 @@ export interface StoredToolTurnItem {
   previewImageUrl?: string;
   tabCards?: ListTabCard[];
   grepMatches?: GrepMatchCard[];
+  readTabCard?: ReadTabCard;
   timestamp: number;
 }
 
@@ -141,6 +143,7 @@ function storedTurnItemToDisplayMessage(
     previewImageUrl: item.previewImageUrl,
     tabCards: item.tabCards,
     grepMatches: item.grepMatches,
+    readTabCard: item.readTabCard,
     timestamp: item.timestamp,
   };
 }
@@ -173,6 +176,7 @@ export function serializeTurnItems(
         previewImageUrl: toolItem.previewImageUrl,
         tabCards: toolItem.tabCards,
         grepMatches: toolItem.grepMatches,
+        readTabCard: toolItem.readTabCard,
         timestamp: toolItem.timestamp,
       };
     });

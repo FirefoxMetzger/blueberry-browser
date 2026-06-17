@@ -18,6 +18,7 @@ import {
   createWorkspaceId,
   DEFAULT_WORKSPACE_ID,
   DEFAULT_WORKSPACE_TOPIC,
+  isBlankTabUrl,
   PENDING_TAB_URL,
   type GlobalWorkspaceProjection,
   type TabKind,
@@ -128,6 +129,31 @@ export class WorkspaceManager {
     for (const listener of this.stateListeners) {
       listener();
     }
+  }
+
+  private focusAddressBar(windowId: string): void {
+    const window = this.windows.get(windowId);
+    if (!window) {
+      return;
+    }
+
+    const topBarContents = window.topBar.view.webContents;
+    if (topBarContents.isDestroyed()) {
+      return;
+    }
+
+    topBarContents.focus();
+    if (!topBarContents.isLoadingMainFrame()) {
+      topBarContents.send("focus-address-bar");
+      return;
+    }
+
+    topBarContents.once("did-finish-load", () => {
+      if (topBarContents.isDestroyed()) {
+        return;
+      }
+      topBarContents.send("focus-address-bar");
+    });
   }
 
   private publishDomainEvent<K extends WorkspacePayloadType>(
@@ -305,13 +331,20 @@ export class WorkspaceManager {
       const materialized = window.getTab(tabId);
       const record = workspace.tabs.get(tabId);
       const kind = record?.kind ?? "browser";
+      const materializedUrl = materialized?.url;
+      const recordUrl = record?.url;
+      const url = !isBlankTabUrl(materializedUrl)
+        ? materializedUrl!
+        : !isBlankTabUrl(recordUrl)
+          ? recordUrl!
+          : materializedUrl ?? recordUrl ?? PENDING_TAB_URL;
       return {
         id: tabId,
         title:
           materialized?.title ??
           record?.title ??
           (kind === "agent-chat" ? "Agent Chat" : "New Tab"),
-        url: materialized?.url ?? record?.url ?? PENDING_TAB_URL,
+        url,
         kind,
         isActive: false,
         workspaceId,
@@ -444,6 +477,14 @@ export class WorkspaceManager {
       "New Tab",
     );
     window.switchActiveTab(tabId);
+
+    this.publishDomainEvent(
+      this.getWorkspaceTopic(workspaceId),
+      "tab-activated",
+      { tabId },
+    );
+    this.notifyStateChanged();
+    this.focusAddressBar(windowId);
 
     return {
       id: tabId,
@@ -949,8 +990,13 @@ export class WorkspaceManager {
       return;
     }
 
-    const topic = this.getWorkspaceTopic(workspaceId);
     const record = this.getTabRecord(workspaceId, tabId);
+    if (isBlankTabUrl(url) && record && !isBlankTabUrl(record.url)) {
+      this.notifyStateChanged();
+      return;
+    }
+
+    const topic = this.getWorkspaceTopic(workspaceId);
 
     if (record && record.url !== url) {
       this.publishDomainEvent(topic, "tab-url-changed", { tabId, url });

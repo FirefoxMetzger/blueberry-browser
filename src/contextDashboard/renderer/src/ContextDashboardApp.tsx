@@ -168,40 +168,58 @@ const buildTabsFromEventRows = (rows: TabEventRow[]): DashboardTab[] => {
         }))
 }
 
-const TabRow: React.FC<{ tab: DashboardTab }> = ({ tab }) => {
+const TabRow: React.FC<{
+    tab: DashboardTab
+    onActivate: (tabId: string) => void
+}> = ({ tab, onActivate }) => {
     return (
-        <li
-            className={`flex min-w-0 items-center gap-2 border-b border-border/70 px-3 py-2 last:border-b-0 ${
-                tab.isActive ? 'bg-muted/40' : ''
-            }`}
-        >
-            <Favicon src={getFaviconUrl(tab.url)} />
-            <span
-                className={`min-w-0 flex-1 truncate text-xs ${
-                    tab.isActive ? 'font-semibold text-foreground' : 'text-foreground/90'
+        <li className="border-b border-border/70 last:border-b-0">
+            <button
+                type="button"
+                onClick={() => onActivate(tab.id)}
+                className={`flex w-full min-w-0 items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-muted/60 ${
+                    tab.isActive ? 'bg-muted/40' : ''
                 }`}
             >
-                {tab.title || 'New Tab'}
-            </span>
+                <Favicon src={getFaviconUrl(tab.url)} />
+                <span
+                    className={`min-w-0 flex-1 truncate text-xs ${
+                        tab.isActive
+                            ? 'font-semibold text-foreground'
+                            : 'text-foreground/90'
+                    }`}
+                >
+                    {tab.title || 'New Tab'}
+                </span>
+            </button>
         </li>
     )
 }
 
-const ConversationRow: React.FC<{ tab: DashboardTab }> = ({ tab }) => {
+const ConversationRow: React.FC<{
+    tab: DashboardTab
+    onActivate: (tabId: string) => void
+}> = ({ tab, onActivate }) => {
     return (
-        <li
-            className={`flex min-w-0 items-center gap-2 border-b border-border/70 px-3 py-2 last:border-b-0 ${
-                tab.isActive ? 'bg-muted/40' : ''
-            }`}
-        >
-            <MessageSquare className="size-4 shrink-0 text-muted-foreground" />
-            <span
-                className={`min-w-0 flex-1 truncate text-xs ${
-                    tab.isActive ? 'font-semibold text-foreground' : 'text-foreground/90'
+        <li className="border-b border-border/70 last:border-b-0">
+            <button
+                type="button"
+                onClick={() => onActivate(tab.id)}
+                className={`flex w-full min-w-0 items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-muted/60 ${
+                    tab.isActive ? 'bg-muted/40' : ''
                 }`}
             >
-                {tab.title || 'Agent Chat'}
-            </span>
+                <MessageSquare className="size-4 shrink-0 text-muted-foreground" />
+                <span
+                    className={`min-w-0 flex-1 truncate text-xs ${
+                        tab.isActive
+                            ? 'font-semibold text-foreground'
+                            : 'text-foreground/90'
+                    }`}
+                >
+                    {tab.title || 'Agent Chat'}
+                </span>
+            </button>
         </li>
     )
 }
@@ -348,6 +366,10 @@ export const ContextDashboardApp: React.FC = () => {
         [tabs]
     )
 
+    const handleActivateTab = useCallback((tabId: string): void => {
+        void window.contextDashboardAPI.switchTab(tabId)
+    }, [])
+
     const tabsContent = useMemo(() => {
         if (browserTabs.length === 0) {
             return (
@@ -360,11 +382,11 @@ export const ContextDashboardApp: React.FC = () => {
         return (
             <ul className="max-h-48 overflow-y-auto">
                 {browserTabs.map((tab) => (
-                    <TabRow key={tab.id} tab={tab} />
+                    <TabRow key={tab.id} onActivate={handleActivateTab} tab={tab} />
                 ))}
             </ul>
         )
-    }, [browserTabs])
+    }, [browserTabs, handleActivateTab])
 
     const conversationsContent = useMemo(() => {
         if (conversations.length === 0) {
@@ -378,11 +400,15 @@ export const ContextDashboardApp: React.FC = () => {
         return (
             <ul className="max-h-48 overflow-y-auto">
                 {conversations.map((tab) => (
-                    <ConversationRow key={tab.id} tab={tab} />
+                    <ConversationRow
+                        key={tab.id}
+                        onActivate={handleActivateTab}
+                        tab={tab}
+                    />
                 ))}
             </ul>
         )
-    }, [conversations])
+    }, [conversations, handleActivateTab])
 
     const activityContent = useMemo(() => {
         if (error) {

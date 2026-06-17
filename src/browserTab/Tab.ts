@@ -1,5 +1,6 @@
 import { NativeImage, WebContentsView } from "electron";
 import type { TabHistorySnapshot } from "../workspaces/types";
+import { isBlankTabUrl } from "../workspaces/types";
 import type { TabStateCallback } from "./types";
 
 export class Tab {
@@ -46,11 +47,17 @@ export class Tab {
     });
 
     this.webContentsView.webContents.on("did-navigate", (_, url) => {
+      if (isBlankTabUrl(url) && !isBlankTabUrl(this._url)) {
+        return;
+      }
       this._url = url;
       this.notifyStateChanged();
     });
 
     this.webContentsView.webContents.on("did-navigate-in-page", (_, url) => {
+      if (isBlankTabUrl(url) && !isBlankTabUrl(this._url)) {
+        return;
+      }
       this._url = url;
       this.notifyStateChanged();
     });
@@ -277,6 +284,9 @@ export class Tab {
   }
 
   loadURL(url: string): Promise<void> {
+    if (!isBlankTabUrl(url) && this.webContents.isLoading()) {
+      this.stop();
+    }
     this._url = url;
     this.notifyStateChanged();
     return this.webContentsView.webContents.loadURL(url);

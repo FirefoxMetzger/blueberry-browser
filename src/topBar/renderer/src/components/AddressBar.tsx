@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   ArrowLeft,
   ArrowRight,
@@ -10,6 +10,24 @@ import { ToolBarButton } from "../components/ToolBarButton";
 import { Favicon } from "../components/Favicon";
 import { DarkModeToggle } from "../components/DarkModeToggle";
 import { cn } from "../lib/utils";
+
+const focusInputWithRetry = (
+  getInput: () => HTMLInputElement | null,
+  attempt = 0,
+): void => {
+  const input = getInput();
+  if (input) {
+    input.focus();
+    input.select();
+    return;
+  }
+
+  if (attempt < 12) {
+    window.setTimeout(() => {
+      focusInputWithRetry(getInput, attempt + 1);
+    }, 16);
+  }
+};
 
 export const AddressBar: React.FC = () => {
   const {
@@ -24,25 +42,35 @@ export const AddressBar: React.FC = () => {
   const [url, setUrl] = useState("");
   const [isEditing, setIsEditing] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const openAddressBarForInput = useCallback((): void => {
+    setIsEditing(true);
+    setIsFocused(true);
+    setUrl("");
+    window.requestAnimationFrame(() => {
+      focusInputWithRetry(() => inputRef.current);
+    });
+  }, []);
 
   useEffect(() => {
-    if (activeTab?.kind === "pending" && !isEditing) {
-      setIsEditing(true);
-      setIsFocused(true);
-      setUrl("");
-      return;
-    }
-
-    if (activeTab && !isEditing) {
-      if (activeTab.kind === "pending") {
-        setUrl("");
-      } else if (activeTab.kind === "agent-chat") {
+    if (activeTab?.kind === "pending") {
+      openAddressBarForInput();
+    } else if (activeTab && !isEditing) {
+      if (activeTab.kind === "agent-chat") {
         setUrl(activeTab.title || "Agent Chat");
       } else {
         setUrl(activeTab.url || "");
       }
     }
-  }, [activeTab, isEditing]);
+  }, [activeTab, isEditing, openAddressBarForInput]);
+
+  useEffect(() => {
+    window.topBarAPI.onFocusAddressBar(openAddressBarForInput);
+    return () => {
+      window.topBarAPI.removeFocusAddressBarListener();
+    };
+  }, [openAddressBarForInput]);
 
   const handleSubmit = (e: React.FormEvent): void => {
     e.preventDefault();
@@ -168,6 +196,7 @@ export const AddressBar: React.FC = () => {
         >
           <div className="bg-background rounded-lg shadow-md p-1 dark:bg-secondary">
             <input
+              ref={inputRef}
               type="text"
               value={url}
               onChange={(e) => setUrl(e.target.value)}
@@ -178,7 +207,6 @@ export const AddressBar: React.FC = () => {
               placeholder={placeholder}
               disabled={!activeTab || isAgentChat}
               spellCheck={false}
-              autoFocus
             />
           </div>
         </form>

@@ -75,6 +75,12 @@ const topBarAPI = {
   removeWorkspaceCreateRequestedListener: () => {
     electronAPI.ipcRenderer.removeAllListeners("workspace-create-requested");
   },
+  onFocusAddressBar: (callback: () => void) => {
+    electronAPI.ipcRenderer.on("focus-address-bar", () => callback());
+  },
+  removeFocusAddressBarListener: () => {
+    electronAPI.ipcRenderer.removeAllListeners("focus-address-bar");
+  },
 
   navigateTab: (tabId: string, url: string) =>
     electronAPI.ipcRenderer.invoke("navigate-tab", tabId, url),

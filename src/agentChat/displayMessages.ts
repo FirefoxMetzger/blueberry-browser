@@ -34,6 +34,12 @@ export interface GrepMatchCard {
   caseInsensitive: boolean;
 }
 
+export interface ReadTabCard {
+  tabId: string;
+  title: string;
+  url: string;
+}
+
 export interface ToolDisplayMessage {
   id: string;
   role: "tool";
@@ -45,6 +51,7 @@ export interface ToolDisplayMessage {
   previewImageUrl?: string;
   tabCards?: ListTabCard[];
   grepMatches?: GrepMatchCard[];
+  readTabCard?: ReadTabCard;
   timestamp: number;
 }
 
@@ -61,6 +68,7 @@ export function summarizeToolInput(
     case "list_tabs":
       return "workspace tabs";
     case "grep":
+    case "search_workspace":
       return `pattern: ${String(input.pattern ?? "")}`;
     case "screenshot": {
       if (input.tab_id) {
@@ -129,7 +137,8 @@ export function summarizeToolResult(
       const count = Number(record.tabCount ?? 0);
       return `${count} tab${count === 1 ? "" : "s"} listed`;
     }
-    case "grep": {
+    case "grep":
+    case "search_workspace": {
       const total = Number(record.totalMatches ?? 0);
       const sources = Number(record.sourcesSearched ?? 0);
       const truncated = record.truncated ? " (truncated)" : "";
@@ -223,9 +232,34 @@ export function applyToolResultToDisplayMessage(
     toolMessage.tabCards = parseListTabCards(unwrapped);
   }
 
-  if (toolMessage.toolName === "grep") {
+  if (
+    toolMessage.toolName === "grep" ||
+    toolMessage.toolName === "search_workspace"
+  ) {
     toolMessage.grepMatches = parseGrepMatchCards(unwrapped);
   }
+
+  if (toolMessage.toolName === "read_tab") {
+    toolMessage.readTabCard = parseReadTabCard(unwrapped);
+  }
+}
+
+function parseReadTabCard(result: unknown): ReadTabCard | undefined {
+  if (!result || typeof result !== "object") {
+    return undefined;
+  }
+
+  const record = result as Record<string, unknown>;
+  const tabId = String(record.tabId ?? "");
+  if (!tabId) {
+    return undefined;
+  }
+
+  return {
+    tabId,
+    title: String(record.title ?? "Untitled"),
+    url: String(record.url ?? ""),
+  };
 }
 
 function parseListTabCards(result: unknown): ListTabCard[] | undefined {

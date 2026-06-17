@@ -60,7 +60,7 @@ export async function readBrowserTab(
 export function createReadTabTool(context: AgentToolContext) {
   return tool({
     description:
-      "Read a browser tab's page content as markdown converted from the DOM. Use tab_id or query to target a tab. Prefer this for detailed page text when grep or screenshot is insufficient.",
+      "Read a browser tab's page content as markdown converted from the DOM. Use tab_id or query to target a tab. Prefer this for detailed page text when search_workspace or screenshot is insufficient.",
     inputSchema: z.object({
       tab_id: z.string().optional().describe("Exact browser tab ID to read."),
       query: z

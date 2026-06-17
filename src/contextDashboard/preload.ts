@@ -25,6 +25,8 @@ const contextDashboardAPI = {
   removeWorkspaceContextUpdatedListener: () => {
     electronAPI.ipcRenderer.removeAllListeners("workspace-context-updated");
   },
+  switchTab: (tabId: string) =>
+    electronAPI.ipcRenderer.invoke("switch-tab", tabId),
 };
 
 if (process.contextIsolated) {

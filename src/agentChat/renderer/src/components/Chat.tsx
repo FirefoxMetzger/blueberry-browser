@@ -141,6 +141,7 @@ const toolIcon = (toolName: string) => {
         case 'list_tabs':
             return LayoutList
         case 'grep':
+        case 'search_workspace':
             return Search
         case 'screenshot':
             return Camera
@@ -324,11 +325,28 @@ const ToolMessage: React.FC<{ message: Extract<Message, { role: 'tool' }> }> = (
         message.status === 'complete' &&
         Boolean(message.tabCards?.length)
     const showGrepMatchCards =
-        message.toolName === 'grep' &&
+        (message.toolName === 'grep' || message.toolName === 'search_workspace') &&
         message.status === 'complete' &&
         Boolean(message.grepMatches?.length)
+    const isNavigableReadTab =
+        message.toolName === 'read_tab' &&
+        message.status === 'complete' &&
+        Boolean(message.readTabCard)
     const hasCollapsibleBody = showListTabsCards || showScreenshotPreview || showGrepMatchCards
     const [isExpanded, setIsExpanded] = useState(true)
+
+    const handleToolHeaderClick = (): void => {
+        if (isNavigableReadTab && message.readTabCard) {
+            void window.agentChatAPI.switchTab(message.readTabCard.tabId)
+            return
+        }
+
+        if (hasCollapsibleBody) {
+            setIsExpanded((open) => !open)
+        }
+    }
+
+    const isToolHeaderInteractive = isNavigableReadTab || hasCollapsibleBody
 
     return (
         <div className="animate-fade-in">
@@ -341,22 +359,23 @@ const ToolMessage: React.FC<{ message: Extract<Message, { role: 'tool' }> }> = (
                 <div
                     className={cn(
                         'flex items-center gap-2 px-4 py-3 text-foreground',
-                        hasCollapsibleBody && 'cursor-pointer hover:bg-muted/20 dark:hover:bg-muted/30',
+                        isToolHeaderInteractive &&
+                            'cursor-pointer hover:bg-muted/20 dark:hover:bg-muted/30',
                     )}
-                    onClick={hasCollapsibleBody ? () => setIsExpanded((open) => !open) : undefined}
+                    onClick={isToolHeaderInteractive ? handleToolHeaderClick : undefined}
                     onKeyDown={
-                        hasCollapsibleBody
+                        isToolHeaderInteractive
                             ? (event) => {
                                 if (event.key === 'Enter' || event.key === ' ') {
                                     event.preventDefault()
-                                    setIsExpanded((open) => !open)
+                                    handleToolHeaderClick()
                                 }
                             }
                             : undefined
                     }
-                    role={hasCollapsibleBody ? 'button' : undefined}
+                    role={isToolHeaderInteractive ? 'button' : undefined}
                     aria-expanded={hasCollapsibleBody ? isExpanded : undefined}
-                    tabIndex={hasCollapsibleBody ? 0 : undefined}
+                    tabIndex={isToolHeaderInteractive ? 0 : undefined}
                 >
                     {isRunning ? (
                         <Loader2 className="size-4 shrink-0 animate-spin text-primary" />
