@@ -8,32 +8,6 @@ function getBrowserTabs(context: AgentToolContext): TabSnapshot[] {
     .filter((tab) => tab.kind === "browser" || tab.kind === "pending");
 }
 
-function resolveBrowserTab(
-  context: AgentToolContext,
-  tabId?: string,
-  query?: string,
-): TabSnapshot | null {
-  const browserTabs = getBrowserTabs(context);
-
-  if (tabId) {
-    return browserTabs.find((tab) => tab.id === tabId) ?? null;
-  }
-
-  if (query?.trim()) {
-    const normalized = query.trim().toLowerCase();
-    return (
-      browserTabs.find(
-        (tab) =>
-          tab.title.toLowerCase().includes(normalized) ||
-          tab.url.toLowerCase().includes(normalized),
-      ) ?? null
-    );
-  }
-
-  const activeTab = browserTabs.find((tab) => tab.isActive);
-  return activeTab ?? browserTabs[0] ?? null;
-}
-
 function formatAvailableTabs(context: AgentToolContext): string {
   const tabs = getBrowserTabs(context);
   if (tabs.length === 0) {
@@ -50,7 +24,23 @@ export function requireBrowserTab(
   tabId?: string,
   query?: string,
 ): TabSnapshot {
-  const tab = resolveBrowserTab(context, tabId, query);
+  const browserTabs = getBrowserTabs(context);
+  let tab: TabSnapshot | null = null;
+
+  if (tabId) {
+    tab = browserTabs.find((entry) => entry.id === tabId) ?? null;
+  } else if (query?.trim()) {
+    const normalized = query.trim().toLowerCase();
+    tab =
+      browserTabs.find(
+        (entry) =>
+          entry.title.toLowerCase().includes(normalized) ||
+          entry.url.toLowerCase().includes(normalized),
+      ) ?? null;
+  } else {
+    tab = browserTabs.find((entry) => entry.isActive) ?? browserTabs[0] ?? null;
+  }
+
   if (!tab) {
     throw new Error(
       `No matching browser tab found. Available tabs: ${formatAvailableTabs(context)}`,

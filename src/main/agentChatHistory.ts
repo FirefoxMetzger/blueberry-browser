@@ -1,60 +1,15 @@
-import {
-  sanitizeAssistantText,
-  type ChatDisplayMessage,
-  type GrepMatchCard,
-  type ListTabCard,
-  type ReadTabCard,
-  type ToolDisplayMessage,
-} from "./displayMessages";
+import type {
+  AgentChatEventRow,
+  AgentChatMessagePayload,
+  ChatDisplayMessage,
+  StoredTurnItem,
+  ToolDisplayMessage,
+} from "../agentChat/types";
 
 export type AgentCoreMessage = {
   role: "user" | "assistant" | "system";
   content: string;
 };
-
-export interface AgentChatMessagePayload {
-  tabId: string;
-  message: string;
-  messageId: string;
-  response?: string;
-  turnItems?: StoredTurnItem[];
-}
-
-interface AgentChatClearPayload {
-  tabId: string;
-}
-
-export interface AgentChatEventRow {
-  id: number;
-  payload: string;
-  payload_type: string;
-  created: string;
-}
-
-interface StoredAssistantTurnItem {
-  id: string;
-  role: "assistant";
-  content: string;
-  timestamp: number;
-  isError?: boolean;
-}
-
-interface StoredToolTurnItem {
-  id: string;
-  role: "tool";
-  toolName: string;
-  status: "complete" | "error";
-  input: Record<string, unknown>;
-  summary?: string;
-  error?: string;
-  previewImageUrl?: string;
-  tabCards?: ListTabCard[];
-  grepMatches?: GrepMatchCard[];
-  readTabCard?: ReadTabCard;
-  timestamp: number;
-}
-
-export type StoredTurnItem = StoredAssistantTurnItem | StoredToolTurnItem;
 
 function parseAgentChatMessagePayload(
   raw: string,
@@ -70,17 +25,6 @@ function parseAgentChatMessagePayload(
     ) {
       return parsed as AgentChatMessagePayload;
     }
-
-    if (Array.isArray(parsed) && parsed[0] && typeof parsed[0] === "object") {
-      const legacy = parsed[0] as { message?: string; messageId?: string };
-      if (typeof legacy.message === "string") {
-        return {
-          tabId: "",
-          message: legacy.message,
-          messageId: legacy.messageId ?? String(Date.now()),
-        };
-      }
-    }
   } catch {
     return null;
   }
@@ -88,7 +32,7 @@ function parseAgentChatMessagePayload(
   return null;
 }
 
-function parseClearPayload(raw: string): AgentChatClearPayload | null {
+function parseClearPayload(raw: string): { tabId: string } | null {
   try {
     const parsed = JSON.parse(raw) as unknown;
     if (
@@ -97,7 +41,7 @@ function parseClearPayload(raw: string): AgentChatClearPayload | null {
       !Array.isArray(parsed) &&
       "tabId" in parsed
     ) {
-      return parsed as AgentChatClearPayload;
+      return parsed as { tabId: string };
     }
   } catch {
     return null;
@@ -122,7 +66,7 @@ function storedTurnItemToDisplayMessage(
     return {
       id: item.id,
       role: "assistant",
-      content: sanitizeAssistantText(item.content),
+      content: item.content,
       timestamp: item.timestamp,
       isError: item.isError,
     };
@@ -142,6 +86,50 @@ function storedTurnItemToDisplayMessage(
     readTabCard: item.readTabCard,
     timestamp: item.timestamp,
   };
+}
+
+function turnItemsFromPayload(
+  payload: AgentChatMessagePayload,
+  timestamp: number,
+): ChatDisplayMessage[] {
+  if (payload.turnItems?.length) {
+    return payload.turnItems
+      .filter(isStoredTurnItem)
+      .map(storedTurnItemToDisplayMessage);
+  }
+
+  if (!payload.response) {
+    return [];
+  }
+
+  return [
+    {
+      id: `${payload.messageId}-assistant`,
+      role: "assistant",
+      content: payload.response,
+      timestamp,
+    },
+  ];
+}
+
+function turnItemsToCoreMessages(
+  turnItems: StoredTurnItem[],
+): AgentCoreMessage[] {
+  const messages: AgentCoreMessage[] = [];
+
+  for (const item of turnItems) {
+    if (item.role === "assistant") {
+      messages.push({ role: "assistant", content: item.content });
+      continue;
+    }
+
+    messages.push({
+      role: "assistant",
+      content: `[tool ${item.toolName}]: ${item.error ?? item.summary ?? item.toolName}`,
+    });
+  }
+
+  return messages;
 }
 
 export function serializeTurnItems(
@@ -176,30 +164,6 @@ export function serializeTurnItems(
         timestamp: toolItem.timestamp,
       };
     });
-}
-
-function turnItemsFromPayload(
-  payload: AgentChatMessagePayload,
-  timestamp: number,
-): ChatDisplayMessage[] {
-  if (payload.turnItems?.length) {
-    return payload.turnItems
-      .filter(isStoredTurnItem)
-      .map(storedTurnItemToDisplayMessage);
-  }
-
-  if (!payload.response) {
-    return [];
-  }
-
-  return [
-    {
-      id: `${payload.messageId}-assistant`,
-      role: "assistant",
-      content: sanitizeAssistantText(payload.response),
-      timestamp,
-    },
-  ];
 }
 
 export function displayMessagesFromEventRows(
@@ -247,23 +211,6 @@ export function displayMessagesFromEventRows(
   return messages;
 }
 
-export function chatTextFromEventRows(
-  rows: AgentChatEventRow[],
-  tabId: string,
-): string {
-  return displayMessagesFromEventRows(rows, tabId)
-    .map((message) => {
-      if (message.role === "user") {
-        return `[user]: ${message.content}`;
-      }
-      if (message.role === "assistant") {
-        return `[assistant]: ${message.content}`;
-      }
-      return `[tool ${message.toolName}]: ${message.error ?? message.summary ?? message.toolName}`;
-    })
-    .join("\n");
-}
-
 export function coreMessagesFromEventRows(
   rows: AgentChatEventRow[],
   tabId: string,
@@ -299,10 +246,14 @@ export function coreMessagesFromEventRows(
       content: payload.message,
     });
 
-    if (payload.response) {
+    if (payload.turnItems?.length) {
+      messages.push(
+        ...turnItemsToCoreMessages(payload.turnItems.filter(isStoredTurnItem)),
+      );
+    } else if (payload.response) {
       messages.push({
         role: "assistant",
-        content: sanitizeAssistantText(payload.response),
+        content: payload.response,
       });
     }
   }

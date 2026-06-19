@@ -15,35 +15,33 @@ interface Input {
   shift_key?: boolean;
 }
 
-const inputSchema = z.object({
-  tab_id: z.string().optional().describe("Exact browser tab ID to target."),
-  query: z
-    .string()
-    .optional()
-    .describe(
-      "Match a browser tab by title or URL substring. Defaults to the active browser tab.",
-    ),
-  x: z.number().optional().describe("Viewport X coordinate for the click."),
-  y: z.number().optional().describe("Viewport Y coordinate for the click."),
-  selector: z
-    .string()
-    .optional()
-    .describe("CSS selector of the element to click."),
-  shift_key: z
-    .boolean()
-    .optional()
-    .describe(
-      "Whether to hold Shift while clicking. Useful for opening links in a new tab.",
-    ),
-}) satisfies z.ZodType<Input>;
-
 type Output = PageActionResult;
 
 export function create(context: AgentToolContext): Tool {
   return defineAgentTool({
     description:
       "Click within a browser tab using viewport coordinates from a screenshot, or a CSS selector. Set shift_key to open links in a new tab.",
-    inputSchema,
+    inputSchema: z.object({
+      tab_id: z.string().optional().describe("Exact browser tab ID to target."),
+      query: z
+        .string()
+        .optional()
+        .describe(
+          "Match a browser tab by title or URL substring. Defaults to the active browser tab.",
+        ),
+      x: z.number().optional().describe("Viewport X coordinate for the click."),
+      y: z.number().optional().describe("Viewport Y coordinate for the click."),
+      selector: z
+        .string()
+        .optional()
+        .describe("CSS selector of the element to click."),
+      shift_key: z
+        .boolean()
+        .optional()
+        .describe(
+          "Whether to hold Shift while clicking. Useful for opening links in a new tab.",
+        ),
+    }) satisfies z.ZodType<Input>,
     execute: async (input: Input): Promise<Output> => {
       const hasCoordinates = input.x !== undefined && input.y !== undefined;
       const hasSelector = Boolean(input.selector?.trim());

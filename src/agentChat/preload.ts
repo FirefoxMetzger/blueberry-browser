@@ -1,21 +1,6 @@
 import { contextBridge } from "electron";
 import { electronAPI } from "@electron-toolkit/preload";
-
-interface ChatRequest {
-  message: string;
-  messageId: string;
-}
-
-interface ChatResponse {
-  messageId: string;
-  content: string;
-  isComplete: boolean;
-}
-
-interface WorkspaceContext {
-  topic: string;
-  name: string;
-}
+import type { ChatRequest, GrepNavigationRequest } from "./types";
 
 const agentChatAPI = {
   sendChatMessage: (request: ChatRequest) =>
@@ -23,22 +8,11 @@ const agentChatAPI = {
 
   clearChat: () => electronAPI.ipcRenderer.invoke("agent-chat-clear-chat"),
 
-  getTabId: () => electronAPI.ipcRenderer.invoke("agent-chat-get-tab-id"),
-
   getChatContext: (): Promise<{ tabId: string; topic: string } | null> =>
     electronAPI.ipcRenderer.invoke("agent-chat-get-context"),
 
-  getActiveWorkspaceContext: (): Promise<WorkspaceContext> =>
-    electronAPI.ipcRenderer.invoke("get-active-workspace-context"),
-
   queryDatabase: (sql: string, params?: unknown[]) =>
     electronAPI.ipcRenderer.invoke("db-query", sql, params),
-
-  getMessages: () => electronAPI.ipcRenderer.invoke("agent-chat-get-messages"),
-
-  onChatResponse: (callback: (data: ChatResponse) => void) => {
-    electronAPI.ipcRenderer.on("chat-response", (_, data) => callback(data));
-  },
 
   onMessagesUpdated: (callback: (messages: unknown[]) => void) => {
     electronAPI.ipcRenderer.on("chat-messages-updated", (_, messages) =>
@@ -46,39 +20,15 @@ const agentChatAPI = {
     );
   },
 
-  removeChatResponseListener: () => {
-    electronAPI.ipcRenderer.removeAllListeners("chat-response");
-  },
-
   removeMessagesUpdatedListener: () => {
     electronAPI.ipcRenderer.removeAllListeners("chat-messages-updated");
   },
 
-  getPageText: () => electronAPI.ipcRenderer.invoke("get-page-text"),
-  getCurrentUrl: () => electronAPI.ipcRenderer.invoke("get-current-url"),
-  getActiveTabInfo: () => electronAPI.ipcRenderer.invoke("get-active-tab-info"),
   switchTab: (tabId: string) =>
     electronAPI.ipcRenderer.invoke("switch-tab", tabId),
-  navigateGrepMatch: (request: {
-    tabId: string;
-    sourceType: "browser-tab" | "agent-chat";
-    pattern: string;
-    caseInsensitive: boolean;
-    lineText: string;
-    lineNumber: number;
-  }) => electronAPI.ipcRenderer.invoke("navigate-grep-match", request),
+  navigateGrepMatch: (request: GrepNavigationRequest) =>
+    electronAPI.ipcRenderer.invoke("navigate-grep-match", request),
 };
 
-if (process.contextIsolated) {
-  try {
-    contextBridge.exposeInMainWorld("electron", electronAPI);
-    contextBridge.exposeInMainWorld("agentChatAPI", agentChatAPI);
-  } catch (error) {
-    console.error(error);
-  }
-} else {
-  // @ts-ignore (define in dts)
-  window.electron = electronAPI;
-  // @ts-ignore (define in dts)
-  window.agentChatAPI = agentChatAPI;
-}
+contextBridge.exposeInMainWorld("electron", electronAPI);
+contextBridge.exposeInMainWorld("agentChatAPI", agentChatAPI);

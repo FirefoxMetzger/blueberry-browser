@@ -14,36 +14,34 @@ interface Input {
   clear_first?: boolean;
 }
 
-const inputSchema = z.object({
-  tab_id: z.string().optional().describe("Exact browser tab ID to target."),
-  query: z
-    .string()
-    .optional()
-    .describe(
-      "Match a browser tab by title or URL substring. Defaults to the active browser tab.",
-    ),
-  text: z.string().describe("Text to type into the editable element."),
-  selector: z
-    .string()
-    .optional()
-    .describe(
-      "CSS selector for the editable element. Omit to use the focused element.",
-    ),
-  clear_first: z
-    .boolean()
-    .optional()
-    .describe(
-      "Whether to clear the field before typing. Defaults to false (append).",
-    ),
-}) satisfies z.ZodType<Input>;
-
 type Output = PageActionResult;
 
 export function create(context: AgentToolContext): Tool {
   return defineAgentTool({
     description:
       "Type text into an editable element in a browser tab. Use selector to target a specific input, textarea, or contenteditable element; otherwise types into the currently focused element.",
-    inputSchema,
+    inputSchema: z.object({
+      tab_id: z.string().optional().describe("Exact browser tab ID to target."),
+      query: z
+        .string()
+        .optional()
+        .describe(
+          "Match a browser tab by title or URL substring. Defaults to the active browser tab.",
+        ),
+      text: z.string().describe("Text to type into the editable element."),
+      selector: z
+        .string()
+        .optional()
+        .describe(
+          "CSS selector for the editable element. Omit to use the focused element.",
+        ),
+      clear_first: z
+        .boolean()
+        .optional()
+        .describe(
+          "Whether to clear the field before typing. Defaults to false (append).",
+        ),
+    }) satisfies z.ZodType<Input>,
     execute: async (input: Input): Promise<Output> => {
       if (!input.text.trim()) {
         throw new Error("text is required.");
@@ -58,9 +56,6 @@ export function create(context: AgentToolContext): Tool {
       const script = `(() => {
     const opts = ${JSON.stringify(typeOptions)};
     const text = String(opts.text ?? "");
-    if (!text) {
-      return { success: false, reason: "text is required" };
-    }
 
     let element = opts.selector
       ? document.querySelector(opts.selector)

@@ -12,16 +12,6 @@ interface Input {
   query?: string;
 }
 
-const inputSchema = z.object({
-  tab_id: z.string().optional().describe("Exact browser tab ID to read."),
-  query: z
-    .string()
-    .optional()
-    .describe(
-      "Match a browser tab by title or URL substring. Defaults to the active browser tab.",
-    ),
-}) satisfies z.ZodType<Input>;
-
 interface Output {
   tabId: string;
   title: string;
@@ -56,7 +46,15 @@ export function create(context: AgentToolContext): Tool {
   return defineAgentTool({
     description:
       "Read a browser tab's page content as markdown converted from the DOM. Use tab_id or query to target a tab. Prefer this for detailed page text when search_workspace or screenshot is insufficient.",
-    inputSchema,
+    inputSchema: z.object({
+      tab_id: z.string().optional().describe("Exact browser tab ID to read."),
+      query: z
+        .string()
+        .optional()
+        .describe(
+          "Match a browser tab by title or URL substring. Defaults to the active browser tab.",
+        ),
+    }) satisfies z.ZodType<Input>,
     execute: async (input: Input): Promise<Output> => {
       const tab = requireBrowserTab(context, input.tab_id, input.query);
       const materialized = await getMaterializedTab(context, tab);

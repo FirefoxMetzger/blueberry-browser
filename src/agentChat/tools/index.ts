@@ -27,5 +27,3 @@ export function createAgentTools(context: AgentToolContext): ToolSet {
     toolModules.map((mod) => [mod.name, mod.create(context)]),
   ) as ToolSet;
 }
-
-export { toolModules };

@@ -23,5 +23,5 @@ confirm before testing again via CDP.
 - CDP **cannot** create/close/switch tabs (`Target.createTarget` "Not supported").
 - Drive the main process via preload bridges with `evaluate_script` on the right page:
   - topbar → `window.topBarAPI` (`createTab()`, `closeTab`, `switchTab`, `tabRunJs`, `submitAddressBar`)
-  - agent chat → `window.agentChatAPI` (`sendChatMessage`, `getMessages`, `clearChat`)
+  - agent chat → `window.agentChatAPI` (`sendChatMessage`, `clearChat`, `getChatContext`)
 - Reusable snippets for CDP-unreachable actions live in `scripts/`.

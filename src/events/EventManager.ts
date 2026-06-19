@@ -9,10 +9,8 @@ import {
 import type { Window } from "../main/Window";
 import type { AgentChatView } from "../agentChat/main";
 import type { WorkspaceManager } from "../workspaces/WorkspaceManager";
-import {
-  buildGrepHighlightScript,
-  type GrepNavigationRequest,
-} from "../agentChat/grepNavigation";
+import { buildGrepHighlightScript } from "../main/grepMatchHighlight";
+import type { GrepNavigationRequest } from "../agentChat/types";
 import { DEFAULT_WORKSPACE_TOPIC, workspaceTopic } from "../workspaces/types";
 import { eventDatabase } from "./database";
 import type { Event } from "./types";
@@ -55,7 +53,6 @@ export class EventManager {
     this.handleTabEvents();
     this.handleWorkspaceEvents();
     this.handleAgentChatEvents();
-    this.handlePageContentEvents();
 
     ipcMain.handle("db-query", (_e, sql: string, params?: unknown) => {
       const boundParams = Array.isArray(params)
@@ -438,24 +435,6 @@ export class EventManager {
       },
       { topic: tabWorkspaceTopic },
     );
-
-    this.handle(
-      "get-active-tab-info",
-      () => {
-        const activeTab = this.mainWindow.activeTab;
-        if (activeTab) {
-          return {
-            id: activeTab.id,
-            url: activeTab.url,
-            title: activeTab.title,
-            canGoBack: activeTab.webContents.canGoBack(),
-            canGoForward: activeTab.webContents.canGoForward(),
-          };
-        }
-        return null;
-      },
-      { topic: activeTabWorkspaceTopic },
-    );
   }
 
   private handleWorkspaceEvents(): void {
@@ -667,9 +646,6 @@ export class EventManager {
   }
 
   private handleAgentChatEvents(): void {
-    const tabWorkspaceTopic = (tabId: unknown): string =>
-      this.getTabWorkspaceTopic(tabId);
-
     this.handle(
       "agent-chat-message",
       async (event, request: { message: string; messageId: string }) => {
@@ -740,12 +716,6 @@ export class EventManager {
     );
 
     this.handle(
-      "agent-chat-get-tab-id",
-      (event) => this.getAgentChatFromSender(event.sender)?.id ?? null,
-      { skipRpcLog: true },
-    );
-
-    this.handle(
       "agent-chat-get-context",
       (event) => {
         const chat = this.getAgentChatFromSender(event.sender);
@@ -763,21 +733,6 @@ export class EventManager {
       },
       { skipRpcLog: true },
     );
-
-    this.handle(
-      "agent-chat-get-messages",
-      (event) => {
-        const chat = this.getAgentChatFromSender(event.sender);
-        if (!chat) {
-          return [];
-        }
-
-        this.ensureAgentChatConfigured(chat);
-        chat.client.hydrateFromDatabase();
-        return chat.client.getMessages();
-      },
-      { skipRpcLog: true, topic: tabWorkspaceTopic },
-    );
   }
 
   private getAgentChatFromSender(sender: WebContents): AgentChatView | null {
@@ -791,35 +746,6 @@ export class EventManager {
 
   private ensureAgentChatConfigured(chat: AgentChatView): void {
     this.workspaceManager.configureAgentChatClient(this.mainWindow.id, chat.id);
-  }
-
-  private handlePageContentEvents(): void {
-    const activeTabWorkspaceTopic = (): string =>
-      this.getActiveTabWorkspaceTopic();
-
-    this.handle(
-      "get-page-text",
-      async () => {
-        if (this.mainWindow.activeTab) {
-          try {
-            return await this.mainWindow.activeTab.getTabText();
-          } catch (error) {
-            console.error("Error getting page text:", error);
-            return null;
-          }
-        }
-        return null;
-      },
-      { topic: activeTabWorkspaceTopic },
-    );
-
-    this.handle(
-      "get-current-url",
-      () => {
-        return this.mainWindow.activeTab?.url ?? null;
-      },
-      { topic: activeTabWorkspaceTopic },
-    );
   }
 
   public cleanup(): void {

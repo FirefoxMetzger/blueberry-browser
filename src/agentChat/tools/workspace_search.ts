@@ -3,7 +3,9 @@ import { z } from "zod";
 import { defineAgentTool } from "./defineAgentTool";
 import { eventDatabase } from "../../events/database";
 import { AGENT_CHAT_MESSAGES_QUERY } from "../../events/queries";
-import { chatTextFromEventRows, type AgentChatEventRow } from "../chatHistory";
+import { chatTextFromEventRows } from "./chatHistory";
+import { getMaterializedTab } from "./tab_utils";
+import type { AgentChatEventRow } from "../types";
 import type { AgentToolContext } from "./types";
 
 export const name = "search_workspace" as const;
@@ -12,20 +14,6 @@ interface Input {
   pattern: string;
   case_insensitive?: boolean;
 }
-
-const inputSchema = z.object({
-  pattern: z
-    .string()
-    .describe(
-      "Regular expression pattern to search for across workspace content.",
-    ),
-  case_insensitive: z
-    .boolean()
-    .optional()
-    .describe(
-      "Whether to perform a case-insensitive search. Defaults to false.",
-    ),
-}) satisfies z.ZodType<Input>;
 
 interface GrepMatch {
   source: string;
@@ -55,20 +43,26 @@ export function create(context: AgentToolContext): Tool {
   return defineAgentTool({
     description:
       "Search all browser tabs and agent chats in the current workspace for a regex pattern. Returns up to 50 matches with +/- 5 lines of context and a source reference for each match.",
-    inputSchema,
+    inputSchema: z.object({
+      pattern: z
+        .string()
+        .min(1)
+        .describe(
+          "Regular expression pattern to search for across workspace content.",
+        ),
+      case_insensitive: z
+        .boolean()
+        .optional()
+        .describe(
+          "Whether to perform a case-insensitive search. Defaults to false.",
+        ),
+    }) satisfies z.ZodType<Input>,
     execute: async (input: Input): Promise<Output> => {
       const caseInsensitive = input.case_insensitive ?? false;
       const trimmedPattern = input.pattern.trim();
 
       if (!trimmedPattern) {
-        return {
-          pattern: trimmedPattern,
-          caseInsensitive,
-          matches: [],
-          totalMatches: 0,
-          truncated: false,
-          sourcesSearched: 0,
-        };
+        throw new Error("pattern is required.");
       }
 
       let regex: RegExp;
@@ -77,6 +71,11 @@ export function create(context: AgentToolContext): Tool {
       } catch {
         throw new Error(`Invalid grep pattern: ${trimmedPattern}`);
       }
+
+      const chatEventRows = eventDatabase.query<AgentChatEventRow>(
+        AGENT_CHAT_MESSAGES_QUERY,
+        [context.workspaceTopic],
+      );
 
       const sources: Array<{
         tabId: string;
@@ -88,19 +87,13 @@ export function create(context: AgentToolContext): Tool {
 
       for (const tab of context.getWorkspaceTabs()) {
         if (tab.kind === "browser" || tab.kind === "pending") {
-          let materializedTab = context.window.getTab(tab.id);
-          if (!materializedTab) {
-            materializedTab = context.ensureBrowserTab?.(tab.id) ?? null;
-          }
-
           let text: string | null = null;
-          if (materializedTab) {
-            try {
-              const tabText = await materializedTab.getTabText();
-              text = tabText.trim() ? tabText : null;
-            } catch (error) {
-              console.error(`Failed to read browser tab ${tab.id}:`, error);
-            }
+          try {
+            const materializedTab = await getMaterializedTab(context, tab);
+            const tabText = await materializedTab.getTabText();
+            text = tabText.trim() ? tabText : null;
+          } catch {
+            // Skip tabs that are not loaded or readable.
           }
 
           if (text?.trim()) {
@@ -116,11 +109,7 @@ export function create(context: AgentToolContext): Tool {
         }
 
         if (tab.kind === "agent-chat") {
-          const rows = eventDatabase.query<AgentChatEventRow>(
-            AGENT_CHAT_MESSAGES_QUERY,
-            [context.workspaceTopic],
-          );
-          const text = chatTextFromEventRows(rows, tab.id);
+          const text = chatTextFromEventRows(chatEventRows, tab.id);
           if (text.trim()) {
             sources.push({
               tabId: tab.id,

@@ -9,14 +9,6 @@ interface Input {
   url: string;
 }
 
-const inputSchema = z.object({
-  url: z
-    .string()
-    .describe(
-      "URL or search query to open, e.g. 'https://example.com' or 'weather in berlin'.",
-    ),
-}) satisfies z.ZodType<Input>;
-
 interface Output {
   success: boolean;
   tabId: string;
@@ -30,7 +22,13 @@ export function create(context: AgentToolContext): Tool {
   return defineAgentTool({
     description:
       "Open a new browser tab and navigate it to a URL or search query. The user is briefly shown the new tab while it loads, then returned to this agent chat. Returns the new tab ID so follow-up tools can target it.",
-    inputSchema,
+    inputSchema: z.object({
+      url: z
+        .string()
+        .describe(
+          "URL or search query to open, e.g. 'https://example.com' or 'weather in berlin'.",
+        ),
+    }) satisfies z.ZodType<Input>,
     execute: async (input: Input): Promise<Output> => {
       if (!context.createBrowserTab) {
         throw new Error("Opening tabs is not available in this context.");

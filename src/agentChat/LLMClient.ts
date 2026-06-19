@@ -8,7 +8,9 @@ import {
 } from "ai";
 import { openai } from "@ai-sdk/openai";
 import { anthropic } from "@ai-sdk/anthropic";
+import { is } from "@electron-toolkit/utils";
 import * as dotenv from "dotenv";
+import { readFileSync } from "node:fs";
 import { join } from "path";
 import type { Window } from "../main/Window";
 import type { Tab } from "../browserTab/Tab";
@@ -19,31 +21,37 @@ import {
   coreMessagesFromEventRows,
   displayMessagesFromEventRows,
   serializeTurnItems,
-  type AgentChatEventRow,
-  type AgentChatMessagePayload,
-} from "./chatHistory";
+} from "../main/agentChatHistory";
+import type {
+  AgentChatEventRow,
+  AgentChatMessagePayload,
+  AssistantDisplayMessage,
+  ChatDisplayMessage,
+  ChatRequest,
+  ToolDisplayMessage,
+} from "./types";
 import {
-  sanitizeAssistantText,
-  summarizeToolInput,
   applyToolResultToDisplayMessage,
-  type ChatDisplayMessage,
-  type AssistantDisplayMessage,
-  type ToolDisplayMessage,
-} from "./displayMessages";
+  summarizeToolInput,
+} from "../main/agentChatToolDisplay";
 import { createAgentTools } from "./tools";
 import type { AgentToolContext } from "./tools/types";
-import { loadAgentInstructions } from "./loadInstructions";
 
 dotenv.config({ path: join(__dirname, "../../.env") });
 
-interface ChatRequest {
-  message: string;
-  messageId: string;
-}
+let cachedAgentInstructions: string | null = null;
 
-interface StreamChunk {
-  content: string;
-  isComplete: boolean;
+function loadAgentInstructions(): string {
+  if (cachedAgentInstructions !== null) {
+    return cachedAgentInstructions;
+  }
+
+  const filePath = is.dev
+    ? join(__dirname, "../../src/agentChat/instructions.md")
+    : join(__dirname, "instructions.md");
+
+  cachedAgentInstructions = readFileSync(filePath, "utf-8").trim();
+  return cachedAgentInstructions;
 }
 
 type LLMProvider = "openai" | "anthropic";
@@ -80,7 +88,18 @@ export class LLMClient {
     this.modelName = this.getModelName();
     this.model = this.initializeModel();
 
-    this.logInitializationStatus();
+    if (this.model) {
+      console.log(
+        `✅ LLM Client initialized with ${this.provider} provider using model: ${this.modelName}`,
+      );
+    } else {
+      const keyName =
+        this.provider === "anthropic" ? "ANTHROPIC_API_KEY" : "OPENAI_API_KEY";
+      console.error(
+        `❌ LLM Client initialization failed: ${keyName} not found in environment variables.\n` +
+          `Please add your API key to the .env file in the project root.`,
+      );
+    }
   }
 
   setWindow(window: Window): void {
@@ -148,8 +167,6 @@ export class LLMClient {
         return anthropic(this.modelName);
       case "openai":
         return openai(this.modelName);
-      default:
-        return null;
     }
   }
 
@@ -159,65 +176,46 @@ export class LLMClient {
         return process.env.ANTHROPIC_API_KEY;
       case "openai":
         return process.env.OPENAI_API_KEY;
-      default:
-        return undefined;
-    }
-  }
-
-  private logInitializationStatus(): void {
-    if (this.model) {
-      console.log(
-        `✅ LLM Client initialized with ${this.provider} provider using model: ${this.modelName}`,
-      );
-    } else {
-      const keyName =
-        this.provider === "anthropic" ? "ANTHROPIC_API_KEY" : "OPENAI_API_KEY";
-      console.error(
-        `❌ LLM Client initialization failed: ${keyName} not found in environment variables.\n` +
-          `Please add your API key to the .env file in the project root.`,
-      );
     }
   }
 
   async sendChatMessage(request: ChatRequest, eventId?: number): Promise<void> {
-    try {
-      if (this.messages.length === 0) {
-        this.hydrateFromDatabase(eventId);
-      }
-
-      const userMessage: CoreMessage = {
-        role: "user",
-        content: request.message,
-      };
-
-      this.messages.push(userMessage);
-      this.displayMessages.push({
-        id: `${request.messageId}-user`,
-        role: "user",
-        content: request.message,
-        timestamp: Date.now(),
-      });
-      this.sendMessagesToRenderer();
-
-      if (!this.model) {
-        this.sendErrorMessage(
-          request.messageId,
-          "LLM service is not configured. Please add your API key to the .env file.",
-        );
-        return;
-      }
-
-      const messages = this.prepareMessagesWithContext();
-      await this.streamResponse(messages, request.messageId, eventId);
-    } catch (error) {
-      console.error("Error in LLM request:", error);
-      this.handleStreamError(
-        error,
-        request.messageId,
-        eventId,
-        `${request.messageId}-assistant-0`,
-      );
+    if (this.messages.length === 0) {
+      this.hydrateFromDatabase(eventId);
     }
+
+    const userMessage: CoreMessage = {
+      role: "user",
+      content: request.message,
+    };
+
+    this.messages.push(userMessage);
+    this.displayMessages.push({
+      id: `${request.messageId}-user`,
+      role: "user",
+      content: request.message,
+      timestamp: Date.now(),
+    });
+    this.sendMessagesToRenderer();
+
+    if (!this.model) {
+      this.sendErrorMessage(
+        request.messageId,
+        "LLM service is not configured. Please add your API key to the .env file.",
+      );
+      return;
+    }
+
+    const systemMessage: CoreMessage = {
+      role: "system",
+      content: loadAgentInstructions(),
+    };
+
+    await this.streamResponse(
+      [systemMessage, ...this.messages],
+      request.messageId,
+      eventId,
+    );
   }
 
   clearMessages(): void {
@@ -230,21 +228,8 @@ export class LLMClient {
     return this.messages;
   }
 
-  getDisplayMessages(): ChatDisplayMessage[] {
-    return this.displayMessages;
-  }
-
   private sendMessagesToRenderer(): void {
     this.webContents.send("chat-messages-updated", this.displayMessages);
-  }
-
-  private prepareMessagesWithContext(): CoreMessage[] {
-    const systemMessage: CoreMessage = {
-      role: "system",
-      content: loadAgentInstructions(),
-    };
-
-    return [systemMessage, ...this.messages];
   }
 
   private buildToolContext(): AgentToolContext | null {
@@ -273,10 +258,6 @@ export class LLMClient {
     messageId: string,
     eventId?: number,
   ): Promise<void> {
-    if (!this.model) {
-      throw new Error("Model not initialized");
-    }
-
     const toolContext = this.buildToolContext();
     const tools: ToolSet | undefined = toolContext
       ? createAgentTools(toolContext)
@@ -286,7 +267,7 @@ export class LLMClient {
 
     try {
       const result = streamText<ToolSet>({
-        model: this.model,
+        model: this.model!,
         messages,
         tools,
         stopWhen: stepCountIs(MAX_AGENT_STEPS),
@@ -320,13 +301,6 @@ export class LLMClient {
       ...turnItems,
     ];
     this.sendMessagesToRenderer();
-  }
-
-  private removeEmptyTrailingAssistant(turnItems: ChatDisplayMessage[]): void {
-    const last = turnItems[turnItems.length - 1];
-    if (last?.role === "assistant" && !last.content.trim()) {
-      turnItems.pop();
-    }
   }
 
   private async processAgentStream(
@@ -389,13 +363,9 @@ export class LLMClient {
           }
 
           const segment = getOrCreateAssistantSegment();
-          segment.content = sanitizeAssistantText(segment.content + part.text);
+          segment.content = segment.content + part.text;
           streamedText += part.text;
           this.syncTurnDisplay(turnStartIndex, turnItems);
-          this.sendStreamChunk(messageId, {
-            content: part.text,
-            isComplete: false,
-          });
           break;
         }
         case "tool-call": {
@@ -404,7 +374,10 @@ export class LLMClient {
           }
 
           currentAssistantId = null;
-          this.removeEmptyTrailingAssistant(turnItems);
+          const last = turnItems[turnItems.length - 1];
+          if (last?.role === "assistant" && !last.content.trim()) {
+            turnItems.pop();
+          }
 
           const input =
             typeof part.input === "object" && part.input !== null
@@ -470,11 +443,7 @@ export class LLMClient {
       }
     }
 
-    let finalText = streamedText;
-    if (!finalText) {
-      finalText = await getFinalText;
-    }
-    finalText = sanitizeAssistantText(finalText);
+    const finalText = streamedText || (await getFinalText);
 
     if (!streamedText && finalText) {
       turnItems.push({
@@ -492,11 +461,7 @@ export class LLMClient {
     });
 
     this.syncTurnDisplay(turnStartIndex, turnItems);
-    this.persistTurn(eventId, messageId, finalText, turnItems);
-    this.sendStreamChunk(messageId, {
-      content: finalText,
-      isComplete: true,
-    });
+    this.persistTurn(eventId, finalText, turnItems);
 
     const lastAssistant = [...turnItems]
       .reverse()
@@ -520,65 +485,26 @@ export class LLMClient {
   }
 
   private getErrorMessage(error: unknown): string {
-    const apiMessage = this.getApiErrorMessage(error);
-    if (apiMessage) {
-      return `API error: ${apiMessage}`;
+    if (error && typeof error === "object" && "data" in error) {
+      const data = (error as { data?: unknown }).data;
+      if (data && typeof data === "object" && "error" in data) {
+        const apiError = (data as { error?: unknown }).error;
+        if (
+          apiError &&
+          typeof apiError === "object" &&
+          "message" in apiError &&
+          typeof apiError.message === "string"
+        ) {
+          return `API error: ${apiError.message}`;
+        }
+      }
     }
 
-    if (!(error instanceof Error)) {
-      return "An unexpected error occurred. Please try again.";
-    }
-
-    const message = error.message.toLowerCase();
-
-    if (message.includes("401") || message.includes("unauthorized")) {
-      return "Authentication error: Please check your API key in the .env file.";
-    }
-
-    if (message.includes("429") || message.includes("rate limit")) {
-      return "Rate limit exceeded. Please try again in a few moments.";
-    }
-
-    if (
-      message.includes("network") ||
-      message.includes("fetch") ||
-      message.includes("econnrefused")
-    ) {
-      return "Network error: Please check your internet connection.";
-    }
-
-    if (message.includes("timeout")) {
-      return "Request timeout: The service took too long to respond. Please try again.";
-    }
-
-    if (error.message.trim()) {
+    if (error instanceof Error && error.message.trim()) {
       return error.message;
     }
 
     return "Sorry, I encountered an error while processing your request. Please try again.";
-  }
-
-  private getApiErrorMessage(error: unknown): string | null {
-    if (!error || typeof error !== "object" || !("data" in error)) {
-      return null;
-    }
-
-    const data = (error as { data?: unknown }).data;
-    if (!data || typeof data !== "object" || !("error" in data)) {
-      return null;
-    }
-
-    const apiError = (data as { error?: unknown }).error;
-    if (
-      apiError &&
-      typeof apiError === "object" &&
-      "message" in apiError &&
-      typeof apiError.message === "string"
-    ) {
-      return apiError.message;
-    }
-
-    return null;
   }
 
   private sendErrorMessage(
@@ -608,32 +534,18 @@ export class LLMClient {
     }
 
     this.sendMessagesToRenderer();
-    this.persistTurn(
-      eventId,
-      messageId,
-      errorMessage,
-      this.getPersistedTurnItems(messageId),
-    );
-    this.sendStreamChunk(messageId, {
-      content: errorMessage,
-      isComplete: true,
-    });
-  }
 
-  private getPersistedTurnItems(messageId: string): ChatDisplayMessage[] {
     const userIndex = this.displayMessages.findIndex(
       (message) => message.id === `${messageId}-user`,
     );
-    if (userIndex < 0) {
-      return [];
-    }
+    const turnItems =
+      userIndex < 0 ? [] : this.displayMessages.slice(userIndex + 1);
 
-    return this.displayMessages.slice(userIndex + 1);
+    this.persistTurn(eventId, errorMessage, turnItems);
   }
 
   private persistTurn(
     eventId: number | undefined,
-    messageId: string,
     response: string,
     turnItems: ChatDisplayMessage[],
   ): void {
@@ -647,28 +559,18 @@ export class LLMClient {
     );
     const existing = rows[0]?.payload;
     if (!existing) {
-      return;
+      throw new Error(`Missing agent chat event payload for id ${eventId}`);
     }
 
-    try {
-      const parsed = JSON.parse(existing) as AgentChatMessagePayload;
-      eventDatabase.updatePayload(eventId, {
-        ...parsed,
-        tabId: parsed.tabId || this.tabId,
-        messageId: parsed.messageId || messageId,
-        response,
-        turnItems: serializeTurnItems(turnItems),
-      });
-    } catch (error) {
-      console.error("Failed to persist agent chat response:", error);
+    const parsed = JSON.parse(existing) as AgentChatMessagePayload;
+    if (!parsed.tabId || !parsed.messageId) {
+      throw new Error(`Invalid agent chat event payload for id ${eventId}`);
     }
-  }
 
-  private sendStreamChunk(messageId: string, chunk: StreamChunk): void {
-    this.webContents.send("chat-response", {
-      messageId,
-      content: chunk.content,
-      isComplete: chunk.isComplete,
+    eventDatabase.updatePayload(eventId, {
+      ...parsed,
+      response,
+      turnItems: serializeTurnItems(turnItems),
     });
   }
 }

@@ -21,7 +21,7 @@ import {
 } from "lucide-react";
 import { useChat } from "../contexts/useChat";
 import type { Message } from "../contexts/chat-context";
-import type { GrepMatchCard, ListTabCard } from "../../../displayMessages";
+import type { GrepMatchCard, ListTabCard } from "../../../types";
 import { Favicon } from "./Favicon";
 import { cn } from "../lib/utils";
 
@@ -57,32 +57,6 @@ const UserMessage: React.FC<{ content: string }> = ({ content }) => (
     </div>
   </div>
 );
-
-// Streaming Text Component
-const StreamingText: React.FC<{ content: string }> = ({ content }) => {
-  const [displayedContent, setDisplayedContent] = useState("");
-  const [currentIndex, setCurrentIndex] = useState(0);
-
-  useEffect(() => {
-    if (currentIndex < content.length) {
-      const timer = setTimeout(() => {
-        setDisplayedContent(content.slice(0, currentIndex + 1));
-        setCurrentIndex(currentIndex + 1);
-      }, 10);
-      return () => clearTimeout(timer);
-    }
-    return undefined;
-  }, [content, currentIndex]);
-
-  return (
-    <div className="whitespace-pre-wrap text-foreground">
-      {displayedContent}
-      {currentIndex < content.length && (
-        <span className="inline-block w-2 h-5 bg-primary/60 dark:bg-primary/40 ml-0.5 animate-pulse" />
-      )}
-    </div>
-  );
-};
 
 // Markdown Renderer Component
 const Markdown: React.FC<{ content: string }> = ({ content }) => (
@@ -152,7 +126,10 @@ const AssistantMessage: React.FC<{
         )}
       >
         {isStreaming ? (
-          <StreamingText content={content} />
+          <div className="whitespace-pre-wrap text-foreground">
+            {content}
+            <span className="inline-block w-2 h-5 bg-primary/60 dark:bg-primary/40 ml-0.5 animate-pulse" />
+          </div>
         ) : isError ? (
           <div className="whitespace-pre-wrap">{content}</div>
         ) : (
@@ -167,7 +144,6 @@ const toolIcon = (toolName: string): LucideIcon => {
   switch (toolName) {
     case "list_tabs":
       return LayoutList;
-    case "grep":
     case "search_workspace":
       return Search;
     case "screenshot":
@@ -339,7 +315,7 @@ const ToolMessage: React.FC<{
     message.status === "complete" &&
     Boolean(message.tabCards?.length);
   const showGrepMatchCards =
-    (message.toolName === "grep" || message.toolName === "search_workspace") &&
+    message.toolName === "search_workspace" &&
     message.status === "complete" &&
     Boolean(message.grepMatches?.length);
   const isNavigableReadTab =
@@ -435,25 +411,10 @@ const ToolMessage: React.FC<{
   );
 };
 
-// Loading Indicator with spinning star
-const LoadingIndicator: React.FC = () => {
-  const [isVisible, setIsVisible] = useState(false);
-
-  useEffect(() => {
-    setIsVisible(true);
-  }, []);
-
-  return (
-    <div
-      className={cn(
-        "transition-transform duration-300 ease-in-out",
-        isVisible ? "scale-100" : "scale-0",
-      )}
-    >
-      ...
-    </div>
-  );
-};
+// Loading Indicator
+const LoadingIndicator: React.FC = () => (
+  <Loader2 className="size-5 animate-spin text-muted-foreground" />
+);
 
 // Chat Input Component with pill design
 const ChatInput: React.FC<{
@@ -561,7 +522,7 @@ const ConversationTurnComponent: React.FC<{
             key={item.id}
             content={item.content}
             isStreaming={item.isStreaming}
-            isError={item.role === "assistant" ? item.isError : undefined}
+            isError={item.isError}
           />
         );
       }

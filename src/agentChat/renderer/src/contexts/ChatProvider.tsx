@@ -1,30 +1,22 @@
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import { AGENT_CHAT_MESSAGES_QUERY } from "../../../../events/queries";
-import {
-  displayMessagesFromEventRows,
-  type AgentChatEventRow,
-} from "../../../chatHistory";
-import { sanitizeAssistantText } from "../../../displayMessages";
+import { displayMessagesFromEventRows } from "../chatHistory";
+import type { AgentChatEventRow, ChatDisplayMessage } from "../../../types";
 import {
   ChatContext,
   type ChatContextType,
   type Message,
 } from "./chat-context";
 
-const isDisplayMessage = (value: unknown): value is Message => {
-  if (!value || typeof value !== "object") {
-    return false;
-  }
-
-  const message = value as Record<string, unknown>;
+function isChatTurnActive(messages: ChatDisplayMessage[]): boolean {
   return (
-    typeof message.id === "string" &&
-    typeof message.role === "string" &&
-    (message.role === "user" ||
-      message.role === "assistant" ||
-      message.role === "tool")
+    messages.some(
+      (message) =>
+        (message.role === "assistant" && message.isStreaming) ||
+        (message.role === "tool" && message.status === "running"),
+    ) || messages[messages.length - 1]?.role === "user"
   );
-};
+}
 
 export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
@@ -83,65 +75,17 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   }, []);
 
-  const clearChat = useCallback(async (): Promise<void> => {
-    try {
-      await window.agentChatAPI.clearChat();
-      setMessages([]);
-    } catch (error) {
-      console.error("Failed to clear chat:", error);
-    }
-  }, []);
-
-  const getPageText = useCallback(async (): Promise<string | null> => {
-    try {
-      return await window.agentChatAPI.getPageText();
-    } catch (error) {
-      console.error("Failed to get page text:", error);
-      return null;
-    }
-  }, []);
-
-  const getCurrentUrl = useCallback(async (): Promise<string | null> => {
-    try {
-      return await window.agentChatAPI.getCurrentUrl();
-    } catch (error) {
-      console.error("Failed to get current URL:", error);
-      return null;
-    }
-  }, []);
-
   useEffect(() => {
-    const handleChatResponse = (data: {
-      messageId: string;
-      content: string;
-      isComplete: boolean;
-    }): void => {
-      if (data.isComplete) {
-        setIsLoading(false);
-      }
-    };
-
     const handleMessagesUpdated = (updatedMessages: unknown[]): void => {
       historyLoadGeneration.current += 1;
-      const convertedMessages = updatedMessages
-        .filter(isDisplayMessage)
-        .map((message) => {
-          if (message.role === "assistant") {
-            return {
-              ...message,
-              content: sanitizeAssistantText(message.content),
-            };
-          }
-          return message;
-        });
-      setMessages(convertedMessages);
+      const nextMessages = updatedMessages as ChatDisplayMessage[];
+      setMessages(nextMessages);
+      setIsLoading(isChatTurnActive(nextMessages));
     };
 
-    window.agentChatAPI.onChatResponse(handleChatResponse);
     window.agentChatAPI.onMessagesUpdated(handleMessagesUpdated);
 
     return () => {
-      window.agentChatAPI.removeChatResponseListener();
       window.agentChatAPI.removeMessagesUpdatedListener();
     };
   }, []);
@@ -150,9 +94,6 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({
     messages,
     isLoading,
     sendMessage,
-    clearChat,
-    getPageText,
-    getCurrentUrl,
   };
 
   return <ChatContext.Provider value={value}>{children}</ChatContext.Provider>;

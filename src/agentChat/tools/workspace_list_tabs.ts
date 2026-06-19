@@ -8,8 +8,6 @@ export const name = "list_tabs" as const;
 
 interface Input {}
 
-const inputSchema = z.object({}) satisfies z.ZodType<Input>;
-
 interface TabEntry {
   id: string;
   title: string;
@@ -32,7 +30,7 @@ export function create(context: AgentToolContext): Tool {
   return defineAgentTool({
     description:
       "List all tabs currently open in the workspace with title, URL, tab ID, and metadata. Call this before screenshot or search_workspace when you need to know which tabs are available or how to target them.",
-    inputSchema,
+    inputSchema: z.object({}) satisfies z.ZodType<Input>,
     execute: async (): Promise<Output> => {
       const tabs = context.getWorkspaceTabs().map((tab) => {
         const materialized = context.window.getTab(tab.id);

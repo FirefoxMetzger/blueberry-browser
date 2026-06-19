@@ -1,64 +1,9 @@
-export interface UserDisplayMessage {
-  id: string;
-  role: "user";
-  content: string;
-  timestamp: number;
-}
-
-export interface AssistantDisplayMessage {
-  id: string;
-  role: "assistant";
-  content: string;
-  timestamp: number;
-  isStreaming?: boolean;
-  isError?: boolean;
-}
-
-export interface ListTabCard {
-  id: string;
-  title: string;
-  url: string;
-  kind: "browser" | "agent-chat" | "pending";
-  isActive?: boolean;
-}
-
-export interface GrepMatchCard {
-  id: string;
-  sourceType: "browser-tab" | "agent-chat";
-  tabId: string;
-  title: string;
-  url?: string;
-  lineNumber: number;
-  lineText: string;
-  pattern: string;
-  caseInsensitive: boolean;
-}
-
-export interface ReadTabCard {
-  tabId: string;
-  title: string;
-  url: string;
-}
-
-export interface ToolDisplayMessage {
-  id: string;
-  role: "tool";
-  toolName: string;
-  status: "running" | "complete" | "error";
-  input: Record<string, unknown>;
-  summary?: string;
-  error?: string;
-  previewImageUrl?: string;
-  tabCards?: ListTabCard[];
-  grepMatches?: GrepMatchCard[];
-  readTabCard?: ReadTabCard;
-  timestamp: number;
-}
-
-export type ChatDisplayMessage =
-  | UserDisplayMessage
-  | AssistantDisplayMessage
-  | ToolDisplayMessage;
+import type {
+  GrepMatchCard,
+  ListTabCard,
+  ReadTabCard,
+  ToolDisplayMessage,
+} from "../agentChat/types";
 
 export function summarizeToolInput(
   toolName: string,
@@ -67,7 +12,6 @@ export function summarizeToolInput(
   switch (toolName) {
     case "list_tabs":
       return "workspace tabs";
-    case "grep":
     case "search_workspace":
       return `pattern: ${String(input.pattern ?? "")}`;
     case "screenshot": {
@@ -94,19 +38,23 @@ export function summarizeToolInput(
       if (input.selector) {
         return `scroll to ${String(input.selector)}`;
       }
+      if (input.scroll_x !== undefined || input.scroll_y !== undefined) {
+        return `scroll to (${String(input.scroll_x ?? 0)}, ${String(input.scroll_y ?? 0)})`;
+      }
       if (input.delta_y !== undefined || input.delta_x !== undefined) {
         return `scroll by ${String(input.delta_x ?? 0)}, ${String(input.delta_y ?? 0)}`;
       }
       return "scroll position";
     }
     case "click_tab": {
+      const shiftSuffix = input.shift_key ? " (shift)" : "";
       if (input.selector) {
-        return `click ${String(input.selector)}`;
+        return `click ${String(input.selector)}${shiftSuffix}`;
       }
       if (input.x !== undefined && input.y !== undefined) {
-        return `click (${String(input.x)}, ${String(input.y)})`;
+        return `click (${String(input.x)}, ${String(input.y)})${shiftSuffix}`;
       }
-      return "click";
+      return `click${shiftSuffix}`;
     }
     case "go_back_tab":
       return input.tab_id
@@ -114,8 +62,13 @@ export function summarizeToolInput(
         : input.query
           ? `query: ${String(input.query)}`
           : "active browser tab";
-    case "type_tab":
-      return `type: ${String(input.text ?? "").slice(0, 40)}`;
+    case "type_tab": {
+      const target = input.selector
+        ? String(input.selector)
+        : "focused element";
+      const clearNote = input.clear_first ? ", clear first" : "";
+      return `type into ${target}: ${String(input.text ?? "").slice(0, 40)}${clearNote}`;
+    }
     default:
       return JSON.stringify(input);
   }
@@ -134,7 +87,6 @@ function summarizeToolResult(toolName: string, result: unknown): string {
       const count = Number(record.tabCount ?? 0);
       return `${count} tab${count === 1 ? "" : "s"} listed`;
     }
-    case "grep":
     case "search_workspace": {
       const total = Number(record.totalMatches ?? 0);
       const sources = Number(record.sourcesSearched ?? 0);
@@ -229,10 +181,7 @@ export function applyToolResultToDisplayMessage(
     toolMessage.tabCards = parseListTabCards(unwrapped);
   }
 
-  if (
-    toolMessage.toolName === "grep" ||
-    toolMessage.toolName === "search_workspace"
-  ) {
+  if (toolMessage.toolName === "search_workspace") {
     toolMessage.grepMatches = parseGrepMatchCards(unwrapped);
   }
 
@@ -338,13 +287,4 @@ function parseGrepMatchCards(result: unknown): GrepMatchCard[] | undefined {
   });
 
   return cards.length > 0 ? cards : undefined;
-}
-
-export function sanitizeAssistantText(text: string): string {
-  return text
-    .replace(/<tool_call>[\s\S]*?<\/tool_call>/gi, "")
-    .replace(/<tool_response>[\s\S]*?<\/tool_response>/gi, "")
-    .replace(/data:image\/[a-z+]+;base64,[A-Za-z0-9+/=]+/gi, "[image]")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
 }

@@ -1,12 +1,3 @@
-export interface GrepNavigationRequest {
-  tabId: string;
-  sourceType: "browser-tab" | "agent-chat";
-  pattern: string;
-  caseInsensitive: boolean;
-  lineText: string;
-  lineNumber: number;
-}
-
 export function buildGrepHighlightScript(options: {
   pattern: string;
   caseInsensitive: boolean;

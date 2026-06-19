@@ -1,18 +1,12 @@
 import { createContext } from "react";
-import type { ChatDisplayMessage } from "../../../displayMessages";
+import type { ChatDisplayMessage } from "../../../types";
 
-export type Message = ChatDisplayMessage & {
-  isStreaming?: boolean;
-  isError?: boolean;
-};
+export type Message = ChatDisplayMessage;
 
 export interface ChatContextType {
   messages: Message[];
   isLoading: boolean;
   sendMessage: (content: string) => Promise<void>;
-  clearChat: () => void;
-  getPageText: () => Promise<string | null>;
-  getCurrentUrl: () => Promise<string | null>;
 }
 
 export const ChatContext = createContext<ChatContextType | null>(null);

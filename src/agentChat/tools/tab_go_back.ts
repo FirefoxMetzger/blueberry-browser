@@ -11,16 +11,6 @@ interface Input {
   query?: string;
 }
 
-const inputSchema = z.object({
-  tab_id: z.string().optional().describe("Exact browser tab ID to target."),
-  query: z
-    .string()
-    .optional()
-    .describe(
-      "Match a browser tab by title or URL substring. Defaults to the active browser tab.",
-    ),
-}) satisfies z.ZodType<Input>;
-
 interface Output {
   success: boolean;
   tabId: string;
@@ -32,7 +22,15 @@ interface Output {
 export function create(context: AgentToolContext): Tool {
   return defineAgentTool({
     description: "Navigate backward one step in a browser tab's history.",
-    inputSchema,
+    inputSchema: z.object({
+      tab_id: z.string().optional().describe("Exact browser tab ID to target."),
+      query: z
+        .string()
+        .optional()
+        .describe(
+          "Match a browser tab by title or URL substring. Defaults to the active browser tab.",
+        ),
+    }) satisfies z.ZodType<Input>,
     execute: async (input: Input): Promise<Output> => {
       const tab = requireBrowserTab(context, input.tab_id, input.query);
       const materialized = await getMaterializedTab(context, tab, {
