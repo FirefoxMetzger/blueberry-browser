@@ -1,10 +1,7 @@
 import { type Tool } from "ai";
 import { z } from "zod";
 import { defineAgentTool } from "./defineAgentTool";
-import {
-  getMaterializedTab,
-  requireBrowserTab,
-} from "./tabUtils";
+import { getMaterializedTab, requireBrowserTab } from "./tabUtils";
 import type { AgentToolContext, ScreenshotResult } from "./types";
 
 export async function captureTabScreenshot(
@@ -58,8 +55,12 @@ export function createScreenshotTool(context: AgentToolContext): Tool {
       }
 
       const capture = result as ScreenshotResult;
-      const base64Match = capture.imageDataUrl.match(/^data:[^;]+;base64,(.+)$/);
-      const mediaTypeMatch = capture.imageDataUrl.match(/^data:([^;]+);base64,/);
+      const base64Match = capture.imageDataUrl.match(
+        /^data:[^;]+;base64,(.+)$/,
+      );
+      const mediaTypeMatch = capture.imageDataUrl.match(
+        /^data:([^;]+);base64,/,
+      );
 
       return {
         type: "content" as const,

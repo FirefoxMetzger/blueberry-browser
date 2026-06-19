@@ -121,10 +121,7 @@ export function summarizeToolInput(
   }
 }
 
-function summarizeToolResult(
-  toolName: string,
-  result: unknown,
-): string {
+function summarizeToolResult(toolName: string, result: unknown): string {
   const value = unwrapToolResultValue(result);
   if (!value || typeof value !== "object") {
     return "Done";

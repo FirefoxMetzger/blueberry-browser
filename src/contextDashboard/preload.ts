@@ -17,7 +17,9 @@ const contextDashboardAPI = {
   removeEventListener: () => {
     electronAPI.ipcRenderer.removeAllListeners("event-logged");
   },
-  onWorkspaceContextUpdated: (callback: (context: WorkspaceContext) => void) => {
+  onWorkspaceContextUpdated: (
+    callback: (context: WorkspaceContext) => void,
+  ) => {
     electronAPI.ipcRenderer.on("workspace-context-updated", (_, context) =>
       callback(context),
     );

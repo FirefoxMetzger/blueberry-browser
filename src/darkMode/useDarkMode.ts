@@ -10,7 +10,10 @@ interface DarkModeEventRow {
   payload: string;
 }
 
-export const useDarkMode = () => {
+export const useDarkMode = (): {
+  isDarkMode: boolean;
+  toggleDarkMode: () => void;
+} => {
   const [isDarkMode, setIsDarkMode] = useState(
     () => window.matchMedia("(prefers-color-scheme: dark)").matches,
   );
@@ -46,11 +49,17 @@ export const useDarkMode = () => {
   }, []);
 
   useEffect(() => {
-    const handleDarkModeUpdate = (_event: unknown, newDarkMode: boolean) => {
+    const handleDarkModeUpdate = (
+      _event: unknown,
+      newDarkMode: boolean,
+    ): void => {
       setIsDarkMode(newDarkMode);
     };
 
-    window.electron.ipcRenderer.on(DARK_MODE_UPDATED_TOPIC, handleDarkModeUpdate);
+    window.electron.ipcRenderer.on(
+      DARK_MODE_UPDATED_TOPIC,
+      handleDarkModeUpdate,
+    );
 
     return () => {
       window.electron.ipcRenderer.removeListener(

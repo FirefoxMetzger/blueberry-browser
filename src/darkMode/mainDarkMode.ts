@@ -1,8 +1,4 @@
-import {
-  IpcMainEvent,
-  nativeTheme,
-  WebContents,
-} from "electron";
+import { IpcMainEvent, nativeTheme, WebContents } from "electron";
 import type { Window } from "../main/Window";
 import type { EventManager } from "../events/EventManager";
 import { eventDatabase } from "../events/database";

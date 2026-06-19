@@ -148,9 +148,7 @@ export class Tab {
     }
   }
 
-  private async capturePageImage(
-    view: WebContentsView,
-  ): Promise<NativeImage> {
+  private async capturePageImage(view: WebContentsView): Promise<NativeImage> {
     let image = await view.webContents.capturePage();
     let size = image.getSize();
 
@@ -160,12 +158,18 @@ export class Tab {
 
     let dimensions = { width: 1280, height: 720 };
     try {
-      dimensions = (await this.runJsWithTimeout(`({
+      dimensions = (await this.runJsWithTimeout(
+        `({
         width: Math.max(1, Math.min(window.innerWidth || document.documentElement.clientWidth || 1280, 1280)),
         height: Math.max(1, Math.min(window.innerHeight || document.documentElement.clientHeight || 720, 720))
-      })`, 2000)) as { width: number; height: number };
+      })`,
+        2000,
+      )) as { width: number; height: number };
     } catch (error) {
-      console.error("Failed to read screenshot dimensions, using defaults:", error);
+      console.error(
+        "Failed to read screenshot dimensions, using defaults:",
+        error,
+      );
     }
 
     image = await view.webContents.capturePage({
@@ -194,7 +198,10 @@ export class Tab {
     return await Promise.race([
       this.runJs(code),
       new Promise<never>((_, reject) => {
-        setTimeout(() => reject(new Error("JS execution timed out")), timeoutMs);
+        setTimeout(
+          () => reject(new Error("JS execution timed out")),
+          timeoutMs,
+        );
       }),
     ]);
   }
@@ -242,7 +249,7 @@ export class Tab {
       let settled = false;
       let idleProbe: NodeJS.Timeout | undefined;
 
-      const finish = () => {
+      const finish = (): void => {
         if (settled) {
           return;
         }
@@ -253,7 +260,7 @@ export class Tab {
 
       const timer = setTimeout(finish, timeoutMs);
 
-      const cleanup = () => {
+      const cleanup = (): void => {
         clearTimeout(timer);
         if (idleProbe) {
           clearTimeout(idleProbe);
@@ -263,7 +270,7 @@ export class Tab {
         this.webContents.removeListener("dom-ready", onDomReady);
       };
 
-      const onDomReady = () => {
+      const onDomReady = (): void => {
         if (!this.webContents.isLoading()) {
           finish();
         }

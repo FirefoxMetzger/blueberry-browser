@@ -30,10 +30,7 @@ function formatTabParagraph(
   const materialized = context.window.getTab(tab.id);
   const loaded = Boolean(materialized);
 
-  const lines = [
-    `${title} (${type}, id: ${tab.id}).${focus}`,
-    `URL: ${url}.`,
-  ];
+  const lines = [`${title} (${type}, id: ${tab.id}).${focus}`, `URL: ${url}.`];
 
   if (tab.kind === "browser" || tab.kind === "pending") {
     const queryHint = screenshotQueryHint(title, url);
@@ -74,7 +71,9 @@ function toTabListEntry(
 }
 
 export function listWorkspaceTabs(context: AgentToolContext): ListTabsResult {
-  const tabs = context.getWorkspaceTabs().map((tab) => toTabListEntry(tab, context));
+  const tabs = context
+    .getWorkspaceTabs()
+    .map((tab) => toTabListEntry(tab, context));
   const formatted =
     tabs.length === 0
       ? "No tabs are currently open in this workspace."

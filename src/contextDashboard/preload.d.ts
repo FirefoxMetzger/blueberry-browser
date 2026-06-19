@@ -18,7 +18,9 @@ interface ContextDashboardAPI {
   queryDatabase: <T = unknown>(sql: string, params?: unknown[]) => Promise<T[]>;
   onEvent: (callback: (event: EventLogEntry) => void) => void;
   removeEventListener: () => void;
-  onWorkspaceContextUpdated: (callback: (context: WorkspaceContext) => void) => void;
+  onWorkspaceContextUpdated: (
+    callback: (context: WorkspaceContext) => void,
+  ) => void;
   removeWorkspaceContextUpdatedListener: () => void;
   switchTab: (tabId: string) => Promise<boolean>;
 }

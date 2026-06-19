@@ -195,7 +195,10 @@ export class EventManager {
 
   public broadcastEvent(event: Event): void {
     this.mainWindow.topBar.view.webContents.send("event-logged", event);
-    this.mainWindow.contextDashboard.view.webContents.send("event-logged", event);
+    this.mainWindow.contextDashboard.view.webContents.send(
+      "event-logged",
+      event,
+    );
     for (const chat of this.mainWindow.allAgentChats) {
       chat.view.webContents.send("event-logged", event);
     }
@@ -213,10 +216,13 @@ export class EventManager {
       "workspace-state-updated",
       snapshot,
     );
-    targetWindow.contextDashboard.view.webContents.send("workspace-context-updated", {
-      topic: activeWorkspace?.topic ?? DEFAULT_EVENT_TOPIC,
-      name: activeWorkspace?.name ?? "Default",
-    });
+    targetWindow.contextDashboard.view.webContents.send(
+      "workspace-context-updated",
+      {
+        topic: activeWorkspace?.topic ?? DEFAULT_EVENT_TOPIC,
+        name: activeWorkspace?.name ?? "Default",
+      },
+    );
   }
 
   private broadcastWorkspaceStateInternal(): void {
@@ -287,9 +293,9 @@ export class EventManager {
             switched: true,
             highlighted: Boolean(
               result &&
-                typeof result === "object" &&
-                "success" in result &&
-                result.success,
+              typeof result === "object" &&
+              "success" in result &&
+              result.success,
             ),
           };
         }
@@ -308,9 +314,9 @@ export class EventManager {
           switched: true,
           highlighted: Boolean(
             result &&
-              typeof result === "object" &&
-              "success" in result &&
-              result.success,
+            typeof result === "object" &&
+            "success" in result &&
+            result.success,
           ),
         };
       },
@@ -338,7 +344,11 @@ export class EventManager {
       (_, url: string) => {
         const activeTab = this.mainWindow.activeTab;
         if (activeTab) {
-          this.workspaceManager.handleNavigateTab(windowId(), activeTab.id, url);
+          this.workspaceManager.handleNavigateTab(
+            windowId(),
+            activeTab.id,
+            url,
+          );
         }
       },
       { topic: activeTabWorkspaceTopic },

@@ -117,7 +117,13 @@ function applyTabEventToWorkspace(
     case "tab-created": {
       const { tabId, url, title, kind } =
         payload as WorkspaceEventPayloads["tab-created"];
-      addTabToWorkspace(state, tabId, url, title ?? "New Tab", kind ?? "browser");
+      addTabToWorkspace(
+        state,
+        tabId,
+        url,
+        title ?? "New Tab",
+        kind ?? "browser",
+      );
       state.lastActiveTabId = tabId;
       break;
     }

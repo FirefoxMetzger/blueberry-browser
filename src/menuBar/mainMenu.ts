@@ -146,7 +146,6 @@ export class AppMenu {
     }
   }
 
-
   private handleToggleDevTools(): void {
     const activeTab = this.mainWindow.activeTab;
 

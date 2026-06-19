@@ -6,10 +6,7 @@ import {
   buildScrollScript,
   buildTypeScript,
 } from "./browserScripts";
-import {
-  getMaterializedTab,
-  requireBrowserTab,
-} from "./tabUtils";
+import { getMaterializedTab, requireBrowserTab } from "./tabUtils";
 import type { AgentToolContext } from "./types";
 
 const tabTargetSchema = {
@@ -203,14 +200,8 @@ export function createClickTabTool(context: AgentToolContext): Tool {
       "Click within a browser tab using viewport coordinates from a screenshot, or a CSS selector. Set shift_key to open links in a new tab.",
     inputSchema: z.object({
       ...tabTargetSchema,
-      x: z
-        .number()
-        .optional()
-        .describe("Viewport X coordinate for the click."),
-      y: z
-        .number()
-        .optional()
-        .describe("Viewport Y coordinate for the click."),
+      x: z.number().optional().describe("Viewport X coordinate for the click."),
+      y: z.number().optional().describe("Viewport Y coordinate for the click."),
       selector: z
         .string()
         .optional()
@@ -247,8 +238,7 @@ export function createClickTabTool(context: AgentToolContext): Tool {
 
 export function createGoBackTabTool(context: AgentToolContext): Tool {
   return defineAgentTool({
-    description:
-      "Navigate backward one step in a browser tab's history.",
+    description: "Navigate backward one step in a browser tab's history.",
     inputSchema: z.object({
       ...tabTargetSchema,
     }),
@@ -258,7 +248,8 @@ export function createGoBackTabTool(context: AgentToolContext): Tool {
         switchToTab: true,
       });
 
-      const canGoBack = materialized.view.webContents.navigationHistory.canGoBack();
+      const canGoBack =
+        materialized.view.webContents.navigationHistory.canGoBack();
       if (!canGoBack) {
         return {
           success: false,

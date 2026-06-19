@@ -1,10 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import {
-  ArrowLeft,
-  ArrowRight,
-  RefreshCw,
-  Loader2,
-} from "lucide-react";
+import { ArrowLeft, ArrowRight, RefreshCw, Loader2 } from "lucide-react";
 import { useBrowser } from "../contexts/BrowserContext";
 import { ToolBarButton } from "../components/ToolBarButton";
 import { Favicon } from "../components/Favicon";
@@ -177,10 +172,7 @@ export const AddressBar: React.FC = () => {
           onClick={goForward}
           active={canNavigate && !isLoading}
         />
-        <ToolBarButton
-          onClick={reload}
-          active={canNavigate && !isLoading}
-        >
+        <ToolBarButton onClick={reload} active={canNavigate && !isLoading}>
           {isLoading ? (
             <Loader2 className="size-4.5 animate-spin" />
           ) : (

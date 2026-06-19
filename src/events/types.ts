@@ -21,7 +21,12 @@ export interface WorkspaceEventPayloads {
   "tab-closed": { tabId: string };
   "tab-url-changed": { tabId: string; url: string };
   "tab-title-changed": { tabId: string; title: string };
-  "tab-kind-changed": { tabId: string; kind: TabKind; url?: string; title?: string };
+  "tab-kind-changed": {
+    tabId: string;
+    kind: TabKind;
+    url?: string;
+    title?: string;
+  };
   "tab-activated": { tabId: string };
   "tab-moved": {
     moveId: string;

@@ -121,11 +121,7 @@ export class LLMClient {
       AGENT_CHAT_MESSAGES_QUERY,
       [topic],
     );
-    this.messages = coreMessagesFromEventRows(
-      rows,
-      this.tabId,
-      excludeEventId,
-    );
+    this.messages = coreMessagesFromEventRows(rows, this.tabId, excludeEventId);
     this.displayMessages = displayMessagesFromEventRows(
       rows,
       this.tabId,
@@ -183,10 +179,7 @@ export class LLMClient {
     }
   }
 
-  async sendChatMessage(
-    request: ChatRequest,
-    eventId?: number,
-  ): Promise<void> {
+  async sendChatMessage(request: ChatRequest, eventId?: number): Promise<void> {
     try {
       if (this.messages.length === 0) {
         this.hydrateFromDatabase(eventId);
@@ -329,9 +322,7 @@ export class LLMClient {
     this.sendMessagesToRenderer();
   }
 
-  private removeEmptyTrailingAssistant(
-    turnItems: ChatDisplayMessage[],
-  ): void {
+  private removeEmptyTrailingAssistant(turnItems: ChatDisplayMessage[]): void {
     const last = turnItems[turnItems.length - 1];
     if (last?.role === "assistant" && !last.content.trim()) {
       turnItems.pop();
@@ -509,7 +500,9 @@ export class LLMClient {
 
     const lastAssistant = [...turnItems]
       .reverse()
-      .find((item): item is AssistantDisplayMessage => item.role === "assistant");
+      .find(
+        (item): item is AssistantDisplayMessage => item.role === "assistant",
+      );
 
     return lastAssistant?.id ?? `${messageId}-assistant-0`;
   }
@@ -523,12 +516,7 @@ export class LLMClient {
     console.error("Error streaming from LLM:", error);
 
     const errorMessage = this.getErrorMessage(error);
-    this.sendErrorMessage(
-      messageId,
-      errorMessage,
-      eventId,
-      assistantDisplayId,
-    );
+    this.sendErrorMessage(messageId, errorMessage, eventId, assistantDisplayId);
   }
 
   private getErrorMessage(error: unknown): string {

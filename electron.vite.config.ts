@@ -42,7 +42,10 @@ export default defineConfig({
         input: {
           topbar: resolve(__dirname, "src/topBar/renderer/index.html"),
           agentchat: resolve(__dirname, "src/agentChat/renderer/index.html"),
-          contextdashboard: resolve(__dirname, "src/contextDashboard/renderer/index.html"),
+          contextdashboard: resolve(
+            __dirname,
+            "src/contextDashboard/renderer/index.html",
+          ),
         },
       },
     },

@@ -3,9 +3,9 @@ import type { TabSnapshot } from "../../workspaces/types";
 import type { AgentToolContext } from "./types";
 
 function getBrowserTabs(context: AgentToolContext): TabSnapshot[] {
-  return context.getWorkspaceTabs().filter(
-    (tab) => tab.kind === "browser" || tab.kind === "pending",
-  );
+  return context
+    .getWorkspaceTabs()
+    .filter((tab) => tab.kind === "browser" || tab.kind === "pending");
 }
 
 function resolveBrowserTab(

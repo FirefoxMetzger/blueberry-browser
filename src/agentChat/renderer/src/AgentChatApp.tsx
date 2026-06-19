@@ -1,5 +1,5 @@
 import React from "react";
-import { ChatProvider } from "./contexts/ChatContext";
+import { ChatProvider } from "./contexts/ChatProvider";
 import { Chat } from "./components/Chat";
 import { useDarkMode } from "@darkMode/useDarkMode";
 

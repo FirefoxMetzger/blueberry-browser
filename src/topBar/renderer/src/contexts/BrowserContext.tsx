@@ -97,7 +97,13 @@ export const BrowserProvider: React.FC<{ children: React.ReactNode }> = ({
   const refreshTabs = useCallback(async () => {
     try {
       const snapshot = await window.topBarAPI.getWorkspaceState();
-      applySnapshot(snapshot, setWorkspaces, setActiveWorkspaceId, setTabs, setContextDashboardVisible);
+      applySnapshot(
+        snapshot,
+        setWorkspaces,
+        setActiveWorkspaceId,
+        setTabs,
+        setContextDashboardVisible,
+      );
     } catch (error) {
       console.error("Failed to refresh workspace state:", error);
     }
@@ -174,19 +180,16 @@ export const BrowserProvider: React.FC<{ children: React.ReactNode }> = ({
     [],
   );
 
-  const submitAddressBar = useCallback(
-    async (tabId: string, input: string) => {
-      setIsLoading(true);
-      try {
-        await window.topBarAPI.submitAddressBar(tabId, input);
-      } catch (error) {
-        console.error("Failed to submit address bar:", error);
-      } finally {
-        setIsLoading(false);
-      }
-    },
-    [],
-  );
+  const submitAddressBar = useCallback(async (tabId: string, input: string) => {
+    setIsLoading(true);
+    try {
+      await window.topBarAPI.submitAddressBar(tabId, input);
+    } catch (error) {
+      console.error("Failed to submit address bar:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
 
   const navigateToUrl = useCallback(
     async (input: string) => {
@@ -267,7 +270,13 @@ export const BrowserProvider: React.FC<{ children: React.ReactNode }> = ({
 
   useEffect(() => {
     const handleSnapshot = (snapshot: WorkspaceSnapshot): void => {
-      applySnapshot(snapshot, setWorkspaces, setActiveWorkspaceId, setTabs, setContextDashboardVisible);
+      applySnapshot(
+        snapshot,
+        setWorkspaces,
+        setActiveWorkspaceId,
+        setTabs,
+        setContextDashboardVisible,
+      );
     };
 
     window.topBarAPI.onTabsUpdated(setTabs);

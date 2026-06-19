@@ -4,8 +4,12 @@ import { useBrowser } from "../contexts/BrowserContext";
 import { cn } from "../lib/utils";
 
 export const WorkspaceSwitcher: React.FC = () => {
-  const { workspaces, activeWorkspaceId, contextDashboardVisible, createWorkspace } =
-    useBrowser();
+  const {
+    workspaces,
+    activeWorkspaceId,
+    contextDashboardVisible,
+    createWorkspace,
+  } = useBrowser();
   const menuButtonRef = useRef<HTMLButtonElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const [isCreating, setIsCreating] = useState(false);

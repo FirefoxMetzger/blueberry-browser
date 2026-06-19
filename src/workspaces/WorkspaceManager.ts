@@ -219,10 +219,7 @@ export class WorkspaceManager {
 
   private getStartupWorkspaceId(): string {
     const lastWorkspaceId = this.loadLastActiveWorkspaceIdFromHistory();
-    if (
-      lastWorkspaceId &&
-      this.projection.workspaces.has(lastWorkspaceId)
-    ) {
+    if (lastWorkspaceId && this.projection.workspaces.has(lastWorkspaceId)) {
       return lastWorkspaceId;
     }
     return DEFAULT_WORKSPACE_ID;
@@ -238,7 +235,9 @@ export class WorkspaceManager {
 
     try {
       const payload = JSON.parse(row.payload) as { workspaceId?: string };
-      return typeof payload.workspaceId === "string" ? payload.workspaceId : null;
+      return typeof payload.workspaceId === "string"
+        ? payload.workspaceId
+        : null;
     } catch {
       return null;
     }
@@ -329,7 +328,7 @@ export class WorkspaceManager {
         ? materializedUrl!
         : !isBlankTabUrl(recordUrl)
           ? recordUrl!
-          : materializedUrl ?? recordUrl ?? PENDING_TAB_URL;
+          : (materializedUrl ?? recordUrl ?? PENDING_TAB_URL);
       return {
         id: tabId,
         title:
@@ -366,11 +365,9 @@ export class WorkspaceManager {
         this.getTabWorkspaceTopic(windowId, tabId) ??
         this.getWorkspaceTopic(this.getSelectedWorkspaceId(windowId)),
     );
-    chat.client.setWorkspaceTabsResolver(
-      () => this.getSnapshot(windowId).tabs,
-    );
-    chat.client.setEnsureBrowserTabResolver(
-      (targetTabId) => this.ensureBrowserTabMaterialized(windowId, targetTabId),
+    chat.client.setWorkspaceTabsResolver(() => this.getSnapshot(windowId).tabs);
+    chat.client.setEnsureBrowserTabResolver((targetTabId) =>
+      this.ensureBrowserTabMaterialized(windowId, targetTabId),
     );
     chat.client.setCreateBrowserTabResolver((url) => {
       const snapshot = this.createTab(windowId);
@@ -488,11 +485,7 @@ export class WorkspaceManager {
     };
   }
 
-  submitAddressBar(
-    windowId: string,
-    tabId: string,
-    input: string,
-  ): boolean {
+  submitAddressBar(windowId: string, tabId: string, input: string): boolean {
     const window = this.windows.get(windowId);
     if (!window) {
       return false;
@@ -530,11 +523,7 @@ export class WorkspaceManager {
     return false;
   }
 
-  private commitPendingTab(
-    windowId: string,
-    tabId: string,
-    url: string,
-  ): void {
+  private commitPendingTab(windowId: string, tabId: string, url: string): void {
     const workspaceId = this.findTabWorkspace(tabId, windowId);
     if (!workspaceId) {
       return;

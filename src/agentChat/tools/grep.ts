@@ -1,9 +1,6 @@
 import { eventDatabase } from "../../events/database";
 import { AGENT_CHAT_MESSAGES_QUERY } from "../../events/queries";
-import {
-  chatTextFromEventRows,
-  type AgentChatEventRow,
-} from "../chatHistory";
+import { chatTextFromEventRows, type AgentChatEventRow } from "../chatHistory";
 import type { TabSnapshot } from "../../workspaces/types";
 import type { AgentToolContext, GrepMatch, GrepResult } from "./types";
 
@@ -19,10 +16,7 @@ interface SearchableSource {
   text: string;
 }
 
-function buildContextBlock(
-  lines: string[],
-  matchLineIndex: number,
-): string {
+function buildContextBlock(lines: string[], matchLineIndex: number): string {
   const start = Math.max(0, matchLineIndex - CONTEXT_LINES);
   const end = Math.min(lines.length - 1, matchLineIndex + CONTEXT_LINES);
 
@@ -36,10 +30,7 @@ function buildContextBlock(
     .join("\n");
 }
 
-function grepInSource(
-  source: SearchableSource,
-  regex: RegExp,
-): GrepMatch[] {
+function grepInSource(source: SearchableSource, regex: RegExp): GrepMatch[] {
   const lines = source.text.split("\n");
   const matches: GrepMatch[] = [];
   const lineRegex = new RegExp(regex.source, regex.flags.replace(/g/g, ""));
@@ -154,7 +145,10 @@ function truncateMatches(matches: GrepMatch[]): {
 
   for (const match of matches) {
     const matchSize = match.context.length + match.source.length + 64;
-    if (limited.length >= MAX_MATCHES || outputChars + matchSize > MAX_OUTPUT_CHARS) {
+    if (
+      limited.length >= MAX_MATCHES ||
+      outputChars + matchSize > MAX_OUTPUT_CHARS
+    ) {
       truncated = true;
       break;
     }
