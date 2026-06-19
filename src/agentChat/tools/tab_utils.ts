@@ -81,3 +81,62 @@ export async function getMaterializedTab(
 
   return materialized;
 }
+
+export interface PageActionResult {
+  success: boolean;
+  tabId: string;
+  title: string;
+  url: string;
+  returnedToChat?: boolean;
+  [key: string]: unknown;
+}
+
+interface RunPageActionOptions {
+  returnToChat?: boolean;
+  waitForLoad?: boolean;
+  postActionDelayMs?: number;
+}
+
+export async function runPageAction(
+  context: AgentToolContext,
+  tabId: string | undefined,
+  query: string | undefined,
+  script: string,
+  options: RunPageActionOptions = {},
+): Promise<PageActionResult> {
+  const agentChatTabId = context.currentChatTabId;
+  const tab = requireBrowserTab(context, tabId, query);
+  const materialized = await getMaterializedTab(context, tab, {
+    switchToTab: true,
+  });
+
+  if (options.waitForLoad) {
+    await materialized.waitForLoad();
+  }
+
+  const result = await materialized.runJs(script);
+
+  if (options.postActionDelayMs) {
+    await new Promise((resolve) =>
+      setTimeout(resolve, options.postActionDelayMs),
+    );
+  }
+
+  if (options.returnToChat) {
+    context.switchBrowserTab?.(agentChatTabId);
+  }
+
+  const actionResult =
+    result && typeof result === "object"
+      ? (result as Record<string, unknown>)
+      : { success: false, reason: "script returned no result" };
+
+  return {
+    success: Boolean(actionResult.success),
+    tabId: tab.id,
+    title: materialized.title || tab.title,
+    url: materialized.url || tab.url,
+    returnedToChat: options.returnToChat ?? false,
+    ...actionResult,
+  };
+}
