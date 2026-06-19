@@ -4,6 +4,7 @@ import {
   stepCountIs,
   type LanguageModel,
   type CoreMessage,
+  type ToolSet,
 } from "ai";
 import { openai } from "@ai-sdk/openai";
 import { anthropic } from "@ai-sdk/anthropic";
@@ -284,12 +285,14 @@ export class LLMClient {
     }
 
     const toolContext = this.buildToolContext();
-    const tools = toolContext ? createAgentTools(toolContext) : undefined;
+    const tools: ToolSet | undefined = toolContext
+      ? createAgentTools(toolContext)
+      : undefined;
     const turnStartIndex = this.displayMessages.length;
     let errorAssistantDisplayId = `${messageId}-assistant-0`;
 
     try {
-      const result = streamText({
+      const result = streamText<ToolSet>({
         model: this.model,
         messages,
         tools,

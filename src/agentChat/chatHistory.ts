@@ -1,4 +1,3 @@
-import type { CoreMessage } from "ai";
 import {
   sanitizeAssistantText,
   type ChatDisplayMessage,
@@ -7,6 +6,11 @@ import {
   type ReadTabCard,
   type ToolDisplayMessage,
 } from "./displayMessages";
+
+export type AgentCoreMessage = {
+  role: "user" | "assistant" | "system";
+  content: string;
+};
 
 export interface AgentChatMessagePayload {
   tabId: string;
@@ -264,13 +268,13 @@ export function coreMessagesFromEventRows(
   rows: AgentChatEventRow[],
   tabId: string,
   excludeEventId?: number,
-): CoreMessage[] {
+): AgentCoreMessage[] {
   const filteredRows =
     excludeEventId === undefined
       ? rows
       : rows.filter((row) => row.id !== excludeEventId);
 
-  const messages: CoreMessage[] = [];
+  const messages: AgentCoreMessage[] = [];
 
   for (const row of filteredRows) {
     if (row.payload_type === "agent-chat-clear-chat") {

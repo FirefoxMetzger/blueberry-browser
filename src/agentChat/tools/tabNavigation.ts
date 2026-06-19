@@ -1,5 +1,6 @@
-import { tool } from "ai";
+import { type Tool } from "ai";
 import { z } from "zod";
+import { defineAgentTool } from "./defineAgentTool";
 import {
   buildClickScript,
   buildScrollScript,
@@ -80,8 +81,8 @@ async function runPageAction(
   };
 }
 
-export function createOpenTabTool(context: AgentToolContext) {
-  return tool({
+export function createOpenTabTool(context: AgentToolContext): Tool {
+  return defineAgentTool({
     description:
       "Open a new browser tab and navigate it to a URL or search query. The user is briefly shown the new tab while it loads, then returned to this agent chat. Returns the new tab ID so follow-up tools can target it.",
     inputSchema: z.object({
@@ -129,8 +130,8 @@ export function createOpenTabTool(context: AgentToolContext) {
   });
 }
 
-export function createScrollTabTool(context: AgentToolContext) {
-  return tool({
+export function createScrollTabTool(context: AgentToolContext): Tool {
+  return defineAgentTool({
     description:
       "Scroll a browser tab. The user is briefly shown the tab while it loads and scrolls, then returned to this agent chat. Provide delta_x/delta_y to scroll by pixels, scroll_x/scroll_y for an absolute position, or selector to scroll an element into view.",
     inputSchema: z.object({
@@ -196,8 +197,8 @@ export function createScrollTabTool(context: AgentToolContext) {
   });
 }
 
-export function createClickTabTool(context: AgentToolContext) {
-  return tool({
+export function createClickTabTool(context: AgentToolContext): Tool {
+  return defineAgentTool({
     description:
       "Click within a browser tab using viewport coordinates from a screenshot, or a CSS selector. Set shift_key to open links in a new tab.",
     inputSchema: z.object({
@@ -244,8 +245,8 @@ export function createClickTabTool(context: AgentToolContext) {
   });
 }
 
-export function createGoBackTabTool(context: AgentToolContext) {
-  return tool({
+export function createGoBackTabTool(context: AgentToolContext): Tool {
+  return defineAgentTool({
     description:
       "Navigate backward one step in a browser tab's history.",
     inputSchema: z.object({
@@ -281,8 +282,8 @@ export function createGoBackTabTool(context: AgentToolContext) {
   });
 }
 
-export function createTypeTabTool(context: AgentToolContext) {
-  return tool({
+export function createTypeTabTool(context: AgentToolContext): Tool {
+  return defineAgentTool({
     description:
       "Type text into an editable element in a browser tab. Use selector to target a specific input, textarea, or contenteditable element; otherwise types into the currently focused element.",
     inputSchema: z.object({

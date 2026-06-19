@@ -1,5 +1,6 @@
-import { tool } from "ai";
+import { type ToolSet } from "ai";
 import { z } from "zod";
+import { defineAgentTool } from "./defineAgentTool";
 import { grepWorkspace } from "./grep";
 import { listWorkspaceTabs } from "./listTabs";
 import { createReadTabTool } from "./readTab";
@@ -13,15 +14,15 @@ import {
 } from "./tabNavigation";
 import type { AgentToolContext } from "./types";
 
-export function createAgentTools(context: AgentToolContext) {
+export function createAgentTools(context: AgentToolContext): ToolSet {
   return {
-    list_tabs: tool({
+    list_tabs: defineAgentTool({
       description:
         "List all tabs currently open in the workspace with title, URL, tab ID, and metadata. Call this before screenshot or search_workspace when you need to know which tabs are available or how to target them.",
       inputSchema: z.object({}),
       execute: async () => listWorkspaceTabs(context),
     }),
-    search_workspace: tool({
+    search_workspace: defineAgentTool({
       description:
         "Search all browser tabs and agent chats in the current workspace for a regex pattern. Returns up to 50 matches with +/- 5 lines of context and a source reference for each match.",
       inputSchema: z.object({
@@ -47,5 +48,5 @@ export function createAgentTools(context: AgentToolContext) {
     click_tab: createClickTabTool(context),
     go_back_tab: createGoBackTabTool(context),
     type_tab: createTypeTabTool(context),
-  };
+  } as ToolSet;
 }

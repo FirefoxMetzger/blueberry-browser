@@ -1,6 +1,7 @@
-import { tool } from "ai";
+import { type Tool } from "ai";
 import { z } from "zod";
 import TurndownService from "turndown";
+import { defineAgentTool } from "./defineAgentTool";
 import { getMaterializedTab, requireBrowserTab } from "./tabUtils";
 import type { AgentToolContext, ReadTabResult } from "./types";
 
@@ -57,8 +58,8 @@ export async function readBrowserTab(
   };
 }
 
-export function createReadTabTool(context: AgentToolContext) {
-  return tool({
+export function createReadTabTool(context: AgentToolContext): Tool {
+  return defineAgentTool({
     description:
       "Read a browser tab's page content as markdown converted from the DOM. Use tab_id or query to target a tab. Prefer this for detailed page text when search_workspace or screenshot is insufficient.",
     inputSchema: z.object({

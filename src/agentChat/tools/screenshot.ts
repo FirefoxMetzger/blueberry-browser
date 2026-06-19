@@ -1,5 +1,6 @@
-import { tool } from "ai";
+import { type Tool } from "ai";
 import { z } from "zod";
+import { defineAgentTool } from "./defineAgentTool";
 import {
   getMaterializedTab,
   requireBrowserTab,
@@ -32,8 +33,8 @@ export async function captureTabScreenshot(
   };
 }
 
-export function createScreenshotTool(context: AgentToolContext) {
-  return tool({
+export function createScreenshotTool(context: AgentToolContext): Tool {
+  return defineAgentTool({
     description:
       "Capture a screenshot of a browser tab in the current workspace. Use query to match by tab title or URL (e.g. 'facebook'), or tab_id for an exact tab ID. Returns the screenshot image for visual analysis.",
     inputSchema: z.object({
