@@ -14,7 +14,7 @@
     "start": "electron-vite preview",
     "dev": "electron-vite dev -- --remote-debugging-port=9222",
     "build": "npm run typecheck && electron-vite build",
-    "postinstall": "electron-builder install-app-deps",
+    "postinstall": "node scripts/install-better-sqlite3-prebuild.cjs",
     "build:unpack": "npm run build && electron-builder --dir",
     "build:win": "npm run build && electron-builder --win",
     "build:mac": "electron-vite build && electron-builder --mac",
@@ -25,10 +25,8 @@
     "@ai-sdk/openai": "^2.0.30",
     "@electron-toolkit/preload": "^3.0.2",
     "@electron-toolkit/utils": "^4.0.0",
-    "@radix-ui/react-slot": "^1.2.3",
     "ai": "^5.0.44",
-    "better-sqlite3": "^11.9.1",
-    "class-variance-authority": "^0.7.1",
+    "better-sqlite3": "^12.11.1",
     "dotenv": "^17.2.2",
     "lucide-react": "^0.544.0",
     "react-markdown": "^10.1.0",
@@ -49,7 +47,7 @@
     "@vitejs/plugin-react": "^4.7.0",
     "autoprefixer": "^10.4.21",
     "clsx": "^2.1.1",
-    "electron": "^37.2.3",
+    "electron": "37.10.3",
     "electron-builder": "^25.1.8",
     "electron-vite": "^4.0.0",
     "eslint": "^9.31.0",
@@ -64,12 +62,5 @@
     "tailwindcss": "^3.4.0",
     "typescript": "^5.8.3",
     "vite": "^7.0.5"
-  },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "better-sqlite3",
-      "electron",
-      "esbuild"
-    ]
   }
 }

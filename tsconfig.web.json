@@ -1,11 +1,6 @@
 {
   "extends": "@electron-toolkit/tsconfig/tsconfig.web.json",
   "include": [
-    "src/renderer/src/env.d.ts",
-    "src/renderer/src/**/*",
-    "src/renderer/src/**/*.tsx",
-    "src/renderer/common/**/*",
-    "src/renderer/common/**/*.tsx",
     "src/darkMode/**/*",
     "src/**/renderer/**/*",
     "src/**/renderer/**/*.tsx",
@@ -17,8 +12,6 @@
     "jsx": "react-jsx",
     "baseUrl": ".",
     "paths": {
-      "@renderer/*": ["src/renderer/src/*"],
-      "@common/*": ["src/renderer/common/*"],
       "@darkMode/*": ["src/darkMode/*"]
     }
   }

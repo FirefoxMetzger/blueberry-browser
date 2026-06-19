@@ -121,7 +121,7 @@ export function summarizeToolInput(
   }
 }
 
-export function summarizeToolResult(
+function summarizeToolResult(
   toolName: string,
   result: unknown,
 ): string {
@@ -176,7 +176,7 @@ export function summarizeToolResult(
   }
 }
 
-export function unwrapToolResultValue(output: unknown): unknown {
+function unwrapToolResultValue(output: unknown): unknown {
   if (!output || typeof output !== "object") {
     return output;
   }

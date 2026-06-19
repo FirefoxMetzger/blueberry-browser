@@ -2,13 +2,13 @@ import type { Tab } from "../../browserTab/Tab";
 import type { TabSnapshot } from "../../workspaces/types";
 import type { AgentToolContext } from "./types";
 
-export function getBrowserTabs(context: AgentToolContext): TabSnapshot[] {
+function getBrowserTabs(context: AgentToolContext): TabSnapshot[] {
   return context.getWorkspaceTabs().filter(
     (tab) => tab.kind === "browser" || tab.kind === "pending",
   );
 }
 
-export function resolveBrowserTab(
+function resolveBrowserTab(
   context: AgentToolContext,
   tabId?: string,
   query?: string,
@@ -34,7 +34,7 @@ export function resolveBrowserTab(
   return activeTab ?? browserTabs[0] ?? null;
 }
 
-export function formatAvailableTabs(context: AgentToolContext): string {
+function formatAvailableTabs(context: AgentToolContext): string {
   const tabs = getBrowserTabs(context);
   if (tabs.length === 0) {
     return "none";

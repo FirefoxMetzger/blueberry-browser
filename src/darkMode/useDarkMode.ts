@@ -10,12 +10,10 @@ interface DarkModeEventRow {
   payload: string;
 }
 
-const getSystemDarkMode = (): boolean => {
-  return window.matchMedia("(prefers-color-scheme: dark)").matches;
-};
-
 export const useDarkMode = () => {
-  const [isDarkMode, setIsDarkMode] = useState(getSystemDarkMode);
+  const [isDarkMode, setIsDarkMode] = useState(
+    () => window.matchMedia("(prefers-color-scheme: dark)").matches,
+  );
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", isDarkMode);

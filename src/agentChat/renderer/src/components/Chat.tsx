@@ -171,16 +171,6 @@ const getTabFavicon = (url: string): string | null => {
     }
 }
 
-const formatTabUrl = (tab: ListTabCard): string => {
-    if (tab.kind === 'agent-chat') {
-        return 'Agent chat'
-    }
-    if (!tab.url || tab.url === 'no URL') {
-        return 'no URL'
-    }
-    return tab.url
-}
-
 const ListTabCardButton: React.FC<{ tab: ListTabCard }> = ({ tab }) => (
     <button
         type="button"
@@ -207,28 +197,14 @@ const ListTabCardButton: React.FC<{ tab: ListTabCard }> = ({ tab }) => (
             </span>
         </div>
         <div className="mt-1 truncate pl-6 text-xs text-muted-foreground">
-            {formatTabUrl(tab)}
+            {tab.kind === 'agent-chat'
+                ? 'Agent chat'
+                : !tab.url || tab.url === 'no URL'
+                  ? 'no URL'
+                  : tab.url}
         </div>
     </button>
 )
-
-const formatGrepMatchSubtitle = (match: GrepMatchCard): string => {
-    if (match.sourceType === 'agent-chat') {
-        return `Agent chat · line ${match.lineNumber}`
-    }
-    if (!match.url || match.url === 'no URL') {
-        return `line ${match.lineNumber}`
-    }
-    return `${match.url} · line ${match.lineNumber}`
-}
-
-const truncateLineText = (text: string, maxLength = 120): string => {
-    const trimmed = text.trim()
-    if (trimmed.length <= maxLength) {
-        return trimmed
-    }
-    return `${trimmed.slice(0, maxLength)}…`
-}
 
 const GrepMatchCardButton: React.FC<{ match: GrepMatchCard }> = ({ match }) => (
     <button
@@ -263,11 +239,20 @@ const GrepMatchCardButton: React.FC<{ match: GrepMatchCard }> = ({ match }) => (
             </span>
         </div>
         <div className="mt-1 truncate pl-6 text-xs text-muted-foreground">
-            {formatGrepMatchSubtitle(match)}
+            {match.sourceType === 'agent-chat'
+                ? `Agent chat · line ${match.lineNumber}`
+                : !match.url || match.url === 'no URL'
+                  ? `line ${match.lineNumber}`
+                  : `${match.url} · line ${match.lineNumber}`}
         </div>
         {match.lineText.trim() && (
             <div className="mt-1.5 truncate pl-6 font-mono text-xs text-foreground/80">
-                {truncateLineText(match.lineText)}
+                {(() => {
+                    const trimmed = match.lineText.trim()
+                    return trimmed.length <= 120
+                        ? trimmed
+                        : `${trimmed.slice(0, 120)}…`
+                })()}
             </div>
         )}
     </button>

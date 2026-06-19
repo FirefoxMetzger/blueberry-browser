@@ -12,7 +12,7 @@ export function isValidWorkspaceDirName(name: string): boolean {
   return !name.includes("/") && !name.includes("\\") && !name.includes("\0");
 }
 
-export function getWorkspaceContextDir(workspaceName: string): string {
+function getWorkspaceContextDir(workspaceName: string): string {
   return join(app.getPath("userData"), "workspaces", workspaceName);
 }
 

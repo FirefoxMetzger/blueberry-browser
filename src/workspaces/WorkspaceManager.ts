@@ -50,15 +50,7 @@ interface WorkspaceSwitchEventRow {
 
 type StateListener = () => void;
 
-function truncateTitle(text: string, maxLength = 40): string {
-  const trimmed = text.trim();
-  if (trimmed.length <= maxLength) {
-    return trimmed;
-  }
-  return `${trimmed.slice(0, maxLength - 1)}…`;
-}
-
-export function normalizeAddressBarInput(
+function normalizeAddressBarInput(
   input: string,
   allowSearch: boolean,
 ): string | null {
@@ -574,7 +566,11 @@ export class WorkspaceManager {
       return;
     }
 
-    const title = truncateTitle(initialMessage);
+    const trimmedMessage = initialMessage.trim();
+    const title =
+      trimmedMessage.length <= 40
+        ? trimmedMessage
+        : `${trimmedMessage.slice(0, 39)}…`;
     const topic = this.getWorkspaceTopic(workspaceId);
 
     window.destroyTabView(tabId);

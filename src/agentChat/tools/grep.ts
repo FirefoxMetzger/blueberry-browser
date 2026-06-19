@@ -19,13 +19,6 @@ interface SearchableSource {
   text: string;
 }
 
-function formatSourceReference(source: SearchableSource): string {
-  if (source.sourceType === "browser-tab") {
-    return `browser-tab:${source.tabId} | ${source.title} | ${source.url ?? "unknown"}`;
-  }
-  return `agent-chat:${source.tabId} | ${source.title}`;
-}
-
 function buildContextBlock(
   lines: string[],
   matchLineIndex: number,
@@ -57,7 +50,10 @@ function grepInSource(
     }
 
     matches.push({
-      source: formatSourceReference(source),
+      source:
+        source.sourceType === "browser-tab"
+          ? `browser-tab:${source.tabId} | ${source.title} | ${source.url ?? "unknown"}`
+          : `agent-chat:${source.tabId} | ${source.title}`,
       sourceType: source.sourceType,
       tabId: source.tabId,
       title: source.title,

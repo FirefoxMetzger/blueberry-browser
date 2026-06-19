@@ -23,7 +23,7 @@ function createEmptyWorkspaceState(
   };
 }
 
-export function createEmptyProjection(): GlobalWorkspaceProjection {
+function createEmptyProjection(): GlobalWorkspaceProjection {
   const workspaces = new Map<string, WorkspaceState>();
   workspaces.set(
     DEFAULT_WORKSPACE_ID,

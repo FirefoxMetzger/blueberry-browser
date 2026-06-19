@@ -16,7 +16,7 @@ export interface AgentChatMessagePayload {
   turnItems?: StoredTurnItem[];
 }
 
-export interface AgentChatClearPayload {
+interface AgentChatClearPayload {
   tabId: string;
 }
 
@@ -27,7 +27,7 @@ export interface AgentChatEventRow {
   created: string;
 }
 
-export interface StoredAssistantTurnItem {
+interface StoredAssistantTurnItem {
   id: string;
   role: "assistant";
   content: string;
@@ -35,7 +35,7 @@ export interface StoredAssistantTurnItem {
   isError?: boolean;
 }
 
-export interface StoredToolTurnItem {
+interface StoredToolTurnItem {
   id: string;
   role: "tool";
   toolName: string;
@@ -51,14 +51,6 @@ export interface StoredToolTurnItem {
 }
 
 export type StoredTurnItem = StoredAssistantTurnItem | StoredToolTurnItem;
-
-/** @deprecated Use ChatDisplayMessage from displayMessages instead */
-export interface StoredChatMessage {
-  id: string;
-  role: "user" | "assistant";
-  content: string;
-  timestamp: number;
-}
 
 function parseAgentChatMessagePayload(
   raw: string,
@@ -266,24 +258,6 @@ export function chatTextFromEventRows(
       return `[tool ${message.toolName}]: ${message.error ?? message.summary ?? message.toolName}`;
     })
     .join("\n");
-}
-
-/** @deprecated Use displayMessagesFromEventRows for UI rendering */
-export function chatMessagesFromEventRows(
-  rows: AgentChatEventRow[],
-  tabId: string,
-): StoredChatMessage[] {
-  return displayMessagesFromEventRows(rows, tabId)
-    .filter(
-      (message): message is StoredChatMessage =>
-        message.role === "user" || message.role === "assistant",
-    )
-    .map((message) => ({
-      id: message.id,
-      role: message.role,
-      content: message.content,
-      timestamp: message.timestamp,
-    }));
 }
 
 export function coreMessagesFromEventRows(

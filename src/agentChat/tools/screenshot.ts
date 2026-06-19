@@ -6,16 +6,6 @@ import {
 } from "./tabUtils";
 import type { AgentToolContext, ScreenshotResult } from "./types";
 
-function imageDataUrlToBase64(dataUrl: string): string {
-  const match = dataUrl.match(/^data:[^;]+;base64,(.+)$/);
-  return match?.[1] ?? dataUrl;
-}
-
-function imageDataUrlMediaType(dataUrl: string): string {
-  const match = dataUrl.match(/^data:([^;]+);base64,/);
-  return match?.[1] ?? "image/png";
-}
-
 export async function captureTabScreenshot(
   context: AgentToolContext,
   options: { tab_id?: string; query?: string } = {},
@@ -67,6 +57,8 @@ export function createScreenshotTool(context: AgentToolContext) {
       }
 
       const capture = result as ScreenshotResult;
+      const base64Match = capture.imageDataUrl.match(/^data:[^;]+;base64,(.+)$/);
+      const mediaTypeMatch = capture.imageDataUrl.match(/^data:([^;]+);base64,/);
 
       return {
         type: "content" as const,
@@ -77,8 +69,8 @@ export function createScreenshotTool(context: AgentToolContext) {
           },
           {
             type: "media" as const,
-            data: imageDataUrlToBase64(capture.imageDataUrl),
-            mediaType: imageDataUrlMediaType(capture.imageDataUrl),
+            data: base64Match?.[1] ?? capture.imageDataUrl,
+            mediaType: mediaTypeMatch?.[1] ?? "image/png",
           },
         ],
       };

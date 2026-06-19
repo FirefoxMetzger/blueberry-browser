@@ -1,16 +1,5 @@
-import type { TabKind, TabSnapshot } from "../../workspaces/types";
+import type { TabSnapshot } from "../../workspaces/types";
 import type { AgentToolContext, ListTabsResult } from "./types";
-
-function kindLabel(kind: TabKind): string {
-  switch (kind) {
-    case "browser":
-      return "browser tab";
-    case "agent-chat":
-      return "agent chat";
-    case "pending":
-      return "pending browser tab";
-  }
-}
 
 function screenshotQueryHint(title: string, url: string): string {
   try {
@@ -31,7 +20,12 @@ function formatTabParagraph(
 ): string {
   const title = tab.title.trim() || "Untitled";
   const url = tab.url.trim() || "no URL";
-  const type = kindLabel(tab.kind);
+  const type =
+    tab.kind === "browser"
+      ? "browser tab"
+      : tab.kind === "agent-chat"
+        ? "agent chat"
+        : "pending browser tab";
   const focus = tab.isActive ? " This tab is currently focused." : "";
   const materialized = context.window.getTab(tab.id);
   const loaded = Boolean(materialized);

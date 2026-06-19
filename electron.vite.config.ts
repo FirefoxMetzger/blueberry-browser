@@ -48,7 +48,6 @@ export default defineConfig({
     },
     resolve: {
       alias: {
-        "@renderer": resolve("src/renderer/src"),
         "@darkMode": resolve("src/darkMode"),
       },
     },

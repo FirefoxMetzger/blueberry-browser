@@ -424,23 +424,14 @@ export class Window {
     });
   }
 
-  private updateTabBounds(): void {
-    this.tabsMap.forEach((tab) => this.setContentBounds(tab.view));
-  }
-
-  private updateAgentChatBounds(): void {
-    const contentTop = this.getContentTop();
-    for (const chat of this.agentChatsMap.values()) {
-      chat.updateBounds(contentTop);
-    }
-  }
-
   updateAllBounds(): void {
     const contentTop = this.getContentTop();
     this._topBar.updateBounds();
-    this.updateTabBounds();
+    this.tabsMap.forEach((tab) => this.setContentBounds(tab.view));
     this._contextDashboard.updateBounds(contentTop);
-    this.updateAgentChatBounds();
+    for (const chat of this.agentChatsMap.values()) {
+      chat.updateBounds(contentTop);
+    }
   }
 
   getContentTop(): number {
