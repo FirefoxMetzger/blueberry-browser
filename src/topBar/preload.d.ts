@@ -38,7 +38,6 @@ interface TopBarAPI {
   onTabsUpdated: (callback: (tabs: TabInfo[]) => void) => void;
   removeTabsUpdatedListener: () => void;
 
-  getWorkspaces: () => Promise<WorkspaceInfo[]>;
   getWorkspaceState: () => Promise<WorkspaceSnapshot>;
   createWorkspace: (name: string) => Promise<WorkspaceInfo | null>;
   removeWorkspace: (workspaceId: string) => Promise<boolean>;

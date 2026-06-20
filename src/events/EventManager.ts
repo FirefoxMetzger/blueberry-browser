@@ -7,10 +7,10 @@ import {
   WebContents,
 } from "electron";
 import type { Window } from "../main/Window";
-import type { AgentChatView } from "../agentChat/main";
+import type { AgentChatView } from "../tabAgent/main";
 import type { WorkspaceManager } from "../workspaces/WorkspaceManager";
 import { buildGrepHighlightScript } from "../main/grepMatchHighlight";
-import type { GrepNavigationRequest } from "../agentChat/types";
+import type { GrepNavigationRequest } from "../tabAgent/types";
 import { DEFAULT_WORKSPACE_TOPIC, workspaceTopic } from "../workspaces/types";
 import { eventDatabase } from "./database";
 import type { Event } from "./types";
@@ -71,14 +71,9 @@ export class EventManager {
   private getActiveWorkspaceContext(): { topic: string; name: string } {
     const windowId = this.mainWindow.id;
     const workspaceId = this.workspaceManager.getSelectedWorkspaceId(windowId);
-    const topic = this.workspaceManager.getWorkspaceTopic(workspaceId);
-    const workspace = this.workspaceManager
-      .getWorkspaces(windowId)
-      .find((entry) => entry.id === workspaceId);
-
     return {
-      topic,
-      name: workspace?.name ?? "Default",
+      topic: this.workspaceManager.getWorkspaceTopic(workspaceId),
+      name: this.workspaceManager.getWorkspaceName(workspaceId),
     };
   }
 
@@ -450,12 +445,6 @@ export class EventManager {
       const trimmed = typeof name === "string" ? name.trim() : "";
       return trimmed ? workspaceTopic(trimmed) : DEFAULT_EVENT_TOPIC;
     };
-
-    this.handle(
-      "get-workspaces",
-      () => this.workspaceManager.getWorkspaces(windowId()),
-      { skipRpcLog: true },
-    );
 
     this.handle(
       "get-workspace-state",

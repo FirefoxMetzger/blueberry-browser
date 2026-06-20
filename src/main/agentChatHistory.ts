@@ -4,7 +4,7 @@ import type {
   ChatDisplayMessage,
   StoredTurnItem,
   ToolDisplayMessage,
-} from "../agentChat/types";
+} from "../tabAgent/types";
 
 export type AgentCoreMessage = {
   role: "user" | "assistant" | "system";

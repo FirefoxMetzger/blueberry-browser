@@ -1,5 +1,5 @@
 import type { Window } from "../../main/Window";
-import type { Tab } from "../../browserTab/Tab";
+import type { Tab } from "../../tabBrowser/Tab";
 import type { TabSnapshot } from "../../workspaces/types";
 
 export interface AgentToolContext {

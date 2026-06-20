@@ -1,13 +1,13 @@
 import { randomUUID } from "crypto";
 import { BaseWindow, shell } from "electron";
-import { Tab } from "../browserTab/Tab";
-import type { TabStateCallback } from "../browserTab/types";
+import { Tab } from "../tabBrowser/Tab";
+import type { TabStateCallback } from "../tabBrowser/types";
 import { TopBar } from "../topBar/main";
-import { AgentChatView } from "../agentChat/main";
-import { ContextDashboard } from "../contextDashboard/main";
+import { AgentChatView } from "../tabAgent/main";
+import { ContextDashboard } from "../tabContext/main";
 import type { TabHistorySnapshot } from "../workspaces/types";
 
-export type { TabStateCallback } from "../browserTab/types";
+export type { TabStateCallback } from "../tabBrowser/types";
 
 export class Window {
   readonly id: string;

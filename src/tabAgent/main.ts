@@ -32,13 +32,13 @@ export class AgentChatView {
 
     if (is.dev && process.env["ELECTRON_RENDERER_URL"]) {
       const agentChatUrl = new URL(
-        "/agentChat/renderer/",
+        "/tabAgent/renderer/",
         process.env["ELECTRON_RENDERER_URL"],
       );
       webContentsView.webContents.loadURL(agentChatUrl.toString());
     } else {
       webContentsView.webContents.loadFile(
-        join(__dirname, "../renderer/agentChat/renderer/index.html"),
+        join(__dirname, "../renderer/tabAgent/renderer/index.html"),
       );
     }
 

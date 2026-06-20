@@ -13,7 +13,7 @@ import * as dotenv from "dotenv";
 import { readFileSync } from "node:fs";
 import { join } from "path";
 import type { Window } from "../main/Window";
-import type { Tab } from "../browserTab/Tab";
+import type { Tab } from "../tabBrowser/Tab";
 import type { TabSnapshot } from "../workspaces/types";
 import { eventDatabase } from "../events/database";
 import { AGENT_CHAT_MESSAGES_QUERY } from "../events/queries";
@@ -47,7 +47,7 @@ function loadAgentInstructions(): string {
   }
 
   const filePath = is.dev
-    ? join(__dirname, "../../src/agentChat/instructions.md")
+    ? join(__dirname, "../../src/tabAgent/instructions.md")
     : join(__dirname, "instructions.md");
 
   cachedAgentInstructions = readFileSync(filePath, "utf-8").trim();

@@ -1,4 +1,4 @@
-import type { Tab } from "../../browserTab/Tab";
+import type { Tab } from "../../tabBrowser/Tab";
 import type { TabSnapshot } from "../../workspaces/types";
 import type { AgentToolContext } from "./types";
 

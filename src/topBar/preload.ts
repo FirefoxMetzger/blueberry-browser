@@ -45,7 +45,6 @@ const topBarAPI = {
     electronAPI.ipcRenderer.removeAllListeners("tabs-updated");
   },
 
-  getWorkspaces: () => electronAPI.ipcRenderer.invoke("get-workspaces"),
   getWorkspaceState: () =>
     electronAPI.ipcRenderer.invoke("get-workspace-state"),
   createWorkspace: (name: string) =>

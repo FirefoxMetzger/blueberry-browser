@@ -9,7 +9,7 @@ function copyAgentInstructions(): Plugin {
     name: "copy-agent-instructions",
     closeBundle() {
       copyFileSync(
-        resolve(__dirname, "src/agentChat/instructions.md"),
+        resolve(__dirname, "src/tabAgent/instructions.md"),
         resolve(__dirname, "out/main/instructions.md"),
       );
     },
@@ -26,10 +26,10 @@ export default defineConfig({
       rollupOptions: {
         input: {
           topBar: resolve(__dirname, "src/topBar/preload.ts"),
-          agentChat: resolve(__dirname, "src/agentChat/preload.ts"),
+          agentChat: resolve(__dirname, "src/tabAgent/preload.ts"),
           contextDashboard: resolve(
             __dirname,
-            "src/contextDashboard/preload.ts",
+            "src/tabContext/preload.ts",
           ),
         },
       },
@@ -41,10 +41,10 @@ export default defineConfig({
       rollupOptions: {
         input: {
           topbar: resolve(__dirname, "src/topBar/renderer/index.html"),
-          agentchat: resolve(__dirname, "src/agentChat/renderer/index.html"),
+          agentchat: resolve(__dirname, "src/tabAgent/renderer/index.html"),
           contextdashboard: resolve(
             __dirname,
-            "src/contextDashboard/renderer/index.html",
+            "src/tabContext/renderer/index.html",
           ),
         },
       },

@@ -3,15 +3,16 @@ import type {
   WorkspaceEventPayloads,
   WorkspacePayloadType,
 } from "../events/types";
+import { app } from "electron";
+import { existsSync, mkdirSync, rmSync } from "fs";
+import { join } from "path";
 import { eventDatabase } from "../events/database";
 import {
   WORKSPACE_EVENTS_QUERY,
   LATEST_WORKSPACE_SWITCH_QUERY,
 } from "../events/queries";
 import type { Window } from "../main/Window";
-import type { Tab } from "../browserTab/Tab";
-import { applyEventRow, replayProjection } from "./WorkspaceProjection";
-import { TabHistoryAggregator } from "./WorkspaceHistory";
+import type { Tab } from "../tabBrowser/Tab";
 import {
   createMoveId,
   createTabId,
@@ -22,6 +23,7 @@ import {
   PENDING_TAB_URL,
   type GlobalWorkspaceProjection,
   type TabKind,
+  type TabHistorySnapshot,
   type TabRecord,
   type TabSnapshot,
   type WorkspaceInfo,
@@ -29,14 +31,10 @@ import {
   type WorkspaceState,
   workspaceTopic,
 } from "./types";
-import {
-  createWorkspaceContextDirs,
-  deleteWorkspaceContextDirs,
-  isValidWorkspaceDirName,
-} from "./workspaceContextDirs";
 
 const DOMAIN_METADATA = { source: "workspace-manager" as const };
 const DOMAIN_METADATA_TYPE = "workspace-meta";
+const WORKSPACE_CONTEXT_SUBDIRS = ["rules", "skills"] as const;
 
 interface StoredEventRow {
   topic: string;
@@ -49,6 +47,30 @@ interface WorkspaceSwitchEventRow {
 }
 
 type StateListener = () => void;
+
+function isValidWorkspaceDirName(name: string): boolean {
+  if (!name || name === "." || name === "..") {
+    return false;
+  }
+
+  return !name.includes("/") && !name.includes("\\") && !name.includes("\0");
+}
+
+function createWorkspaceContextDirs(workspaceName: string): void {
+  const workspaceDir = join(app.getPath("userData"), "workspaces", workspaceName);
+
+  for (const subdir of WORKSPACE_CONTEXT_SUBDIRS) {
+    mkdirSync(join(workspaceDir, subdir), { recursive: true });
+  }
+}
+
+function deleteWorkspaceContextDirs(workspaceName: string): void {
+  const workspaceDir = join(app.getPath("userData"), "workspaces", workspaceName);
+
+  if (existsSync(workspaceDir)) {
+    rmSync(workspaceDir, { recursive: true, force: true });
+  }
+}
 
 function normalizeAddressBarInput(
   input: string,
@@ -79,25 +101,329 @@ function normalizeAddressBarInput(
   return null;
 }
 
+function createEmptyWorkspaceState(
+  workspaceId: string,
+  name: string,
+  topic = workspaceTopic(name),
+): WorkspaceState {
+  return {
+    id: workspaceId,
+    name,
+    topic,
+    tabOrder: [],
+    tabs: new Map(),
+    lastActiveTabId: null,
+  };
+}
+
+function createEmptyProjection(): GlobalWorkspaceProjection {
+  const workspaces = new Map<string, WorkspaceState>();
+  workspaces.set(
+    DEFAULT_WORKSPACE_ID,
+    createEmptyWorkspaceState(
+      DEFAULT_WORKSPACE_ID,
+      "Default",
+      DEFAULT_WORKSPACE_TOPIC,
+    ),
+  );
+  return { workspaces };
+}
+
+function addTabToWorkspace(
+  state: WorkspaceState,
+  tabId: string,
+  url: string,
+  title: string,
+  kind: TabKind = "browser",
+): void {
+  if (!state.tabOrder.includes(tabId)) {
+    state.tabOrder.push(tabId);
+  }
+  state.tabs.set(tabId, {
+    id: tabId,
+    title,
+    url,
+    kind,
+  });
+}
+
+function removeTabFromWorkspace(state: WorkspaceState, tabId: string): void {
+  state.tabOrder = state.tabOrder.filter((id) => id !== tabId);
+  state.tabs.delete(tabId);
+  if (state.lastActiveTabId === tabId) {
+    state.lastActiveTabId =
+      state.tabOrder.length > 0
+        ? state.tabOrder[state.tabOrder.length - 1]
+        : null;
+  }
+}
+
+function applyEventRow(
+  projection: GlobalWorkspaceProjection,
+  row: Pick<Event, "topic" | "payload_type" | "payload">,
+): void {
+  const { topic, payload_type: payloadType, payload } = row;
+
+  if (payloadType === "workspace-created") {
+    const { workspaceId, name } =
+      payload as WorkspaceEventPayloads["workspace-created"];
+    if (!projection.workspaces.has(workspaceId)) {
+      projection.workspaces.set(
+        workspaceId,
+        createEmptyWorkspaceState(workspaceId, name),
+      );
+    }
+    return;
+  }
+
+  if (payloadType === "workspace-removed") {
+    const { workspaceId } =
+      payload as WorkspaceEventPayloads["workspace-removed"];
+    if (workspaceId !== DEFAULT_WORKSPACE_ID) {
+      projection.workspaces.delete(workspaceId);
+    }
+    return;
+  }
+
+  if (payloadType === "workspace-switched") {
+    return;
+  }
+
+  if (!topic) {
+    return;
+  }
+
+  let workspace: WorkspaceState | undefined;
+  for (const candidate of projection.workspaces.values()) {
+    if (candidate.topic === topic) {
+      workspace = candidate;
+      break;
+    }
+  }
+
+  if (workspace) {
+    applyTabEventToWorkspace(workspace, payloadType, payload);
+  }
+}
+
+function applyTabEventToWorkspace(
+  state: WorkspaceState,
+  payloadType: string,
+  payload: unknown,
+): void {
+  switch (payloadType) {
+    case "tab-created": {
+      const { tabId, url, title, kind } =
+        payload as WorkspaceEventPayloads["tab-created"];
+      addTabToWorkspace(
+        state,
+        tabId,
+        url,
+        title ?? "New Tab",
+        kind ?? "browser",
+      );
+      state.lastActiveTabId = tabId;
+      break;
+    }
+    case "tab-kind-changed": {
+      const { tabId, kind, url, title } =
+        payload as WorkspaceEventPayloads["tab-kind-changed"];
+      const tab = state.tabs.get(tabId);
+      if (tab) {
+        tab.kind = kind;
+        if (url !== undefined) {
+          tab.url = url;
+        }
+        if (title !== undefined) {
+          tab.title = title;
+        }
+      }
+      break;
+    }
+    case "tab-closed": {
+      const { tabId } = payload as WorkspaceEventPayloads["tab-closed"];
+      removeTabFromWorkspace(state, tabId);
+      break;
+    }
+    case "tab-url-changed": {
+      const { tabId, url } =
+        payload as WorkspaceEventPayloads["tab-url-changed"];
+      const tab = state.tabs.get(tabId);
+      if (tab) {
+        tab.url = url;
+      }
+      break;
+    }
+    case "tab-title-changed": {
+      const { tabId, title } =
+        payload as WorkspaceEventPayloads["tab-title-changed"];
+      const tab = state.tabs.get(tabId);
+      if (tab) {
+        tab.title = title;
+      }
+      break;
+    }
+    case "tab-activated": {
+      const { tabId } = payload as WorkspaceEventPayloads["tab-activated"];
+      if (state.tabs.has(tabId)) {
+        state.lastActiveTabId = tabId;
+      }
+      break;
+    }
+    case "tab-moved": {
+      const move = payload as WorkspaceEventPayloads["tab-moved"];
+      if (move.direction === "out") {
+        removeTabFromWorkspace(state, move.tabId);
+      } else {
+        addTabToWorkspace(
+          state,
+          move.tabId,
+          move.url,
+          move.title,
+          move.kind ?? "browser",
+        );
+        state.lastActiveTabId = move.tabId;
+      }
+      break;
+    }
+    default:
+      break;
+  }
+}
+
+function replayProjection(
+  rows: Pick<Event, "topic" | "payload_type" | "payload">[],
+): GlobalWorkspaceProjection {
+  const projection = createEmptyProjection();
+  for (const row of rows) {
+    applyEventRow(projection, row);
+  }
+  return projection;
+}
+
+type HistoryEventRow = Pick<Event, "payload_type" | "payload">;
+
+function createNavigationEntry(
+  url: string,
+  title?: string,
+): Electron.NavigationEntry {
+  return {
+    url,
+    title: title ?? url,
+  };
+}
+
+class TabHistoryAggregator {
+  private histories = new Map<string, TabHistorySnapshot>();
+
+  constructor(rows: HistoryEventRow[] = []) {
+    for (const row of rows) {
+      this.apply(row);
+    }
+  }
+
+  apply(row: HistoryEventRow): void {
+    switch (row.payload_type) {
+      case "tab-created": {
+        const { tabId, url, title } =
+          row.payload as WorkspaceEventPayloads["tab-created"];
+        this.histories.set(tabId, {
+          entries: [createNavigationEntry(url, title ?? "New Tab")],
+          index: 0,
+        });
+        break;
+      }
+      case "tab-closed": {
+        const { tabId } = row.payload as WorkspaceEventPayloads["tab-closed"];
+        this.histories.delete(tabId);
+        break;
+      }
+      case "tab-url-changed": {
+        const { tabId, url } =
+          row.payload as WorkspaceEventPayloads["tab-url-changed"];
+        this.applyUrlChange(tabId, url);
+        break;
+      }
+      case "tab-title-changed": {
+        const { tabId, title } =
+          row.payload as WorkspaceEventPayloads["tab-title-changed"];
+        this.applyTitleChange(tabId, title);
+        break;
+      }
+      default:
+        break;
+    }
+  }
+
+  getHistory(tabId: string): TabHistorySnapshot | undefined {
+    const history = this.histories.get(tabId);
+    if (!history || history.entries.length === 0) {
+      return undefined;
+    }
+
+    return {
+      entries: history.entries.map((entry) => ({ ...entry })),
+      index: history.index,
+    };
+  }
+
+  hydrateProjection(projection: GlobalWorkspaceProjection): void {
+    for (const workspace of projection.workspaces.values()) {
+      for (const [tabId, tab] of workspace.tabs) {
+        tab.history = this.getHistory(tabId);
+      }
+    }
+  }
+
+  private applyUrlChange(tabId: string, url: string): void {
+    const history = this.ensureHistory(tabId, url);
+    const current = history.entries[history.index];
+
+    if (current?.url === url) {
+      return;
+    }
+
+    history.entries = history.entries.slice(0, history.index + 1);
+    history.entries.push(createNavigationEntry(url));
+    history.index = history.entries.length - 1;
+  }
+
+  private applyTitleChange(tabId: string, title: string): void {
+    const history = this.histories.get(tabId);
+    if (!history) {
+      return;
+    }
+
+    const current = history.entries[history.index];
+    if (current) {
+      current.title = title;
+    }
+  }
+
+  private ensureHistory(tabId: string, url: string): TabHistorySnapshot {
+    let history = this.histories.get(tabId);
+    if (!history) {
+      history = {
+        entries: [createNavigationEntry(url)],
+        index: 0,
+      };
+      this.histories.set(tabId, history);
+    }
+    return history;
+  }
+}
+
 export class WorkspaceManager {
   private projection: GlobalWorkspaceProjection;
   private historyAggregator: TabHistoryAggregator;
-  private windows = new Map<string, Window>();
-  private windowWorkspaceSelection = new Map<string, string>();
+  private window: Window | null = null;
+  private selectedWorkspaceId = DEFAULT_WORKSPACE_ID;
   private stateListeners = new Set<StateListener>();
   private broadcastEvent: (event: Event) => void;
 
   constructor(broadcastEvent: (event: Event) => void) {
     this.broadcastEvent = broadcastEvent;
-    const restored = this.loadProjectionFromHistory();
-    this.projection = restored.projection;
-    this.historyAggregator = restored.historyAggregator;
-  }
 
-  private loadProjectionFromHistory(): {
-    projection: GlobalWorkspaceProjection;
-    historyAggregator: TabHistoryAggregator;
-  } {
     const rows = eventDatabase.query<StoredEventRow>(WORKSPACE_EVENTS_QUERY);
     const parsedRows = rows.map((row) => ({
       topic: row.topic,
@@ -105,11 +431,9 @@ export class WorkspaceManager {
       payload: JSON.parse(row.payload) as unknown,
     }));
 
-    const projection = replayProjection(parsedRows);
-    const historyAggregator = new TabHistoryAggregator(parsedRows);
-    historyAggregator.hydrateProjection(projection);
-
-    return { projection, historyAggregator };
+    this.projection = replayProjection(parsedRows);
+    this.historyAggregator = new TabHistoryAggregator(parsedRows);
+    this.historyAggregator.hydrateProjection(this.projection);
   }
 
   onStateChanged(listener: StateListener): () => void {
@@ -123,8 +447,8 @@ export class WorkspaceManager {
     }
   }
 
-  private focusAddressBar(windowId: string): void {
-    const window = this.windows.get(windowId);
+  private focusAddressBar(): void {
+    const window = this.window;
     if (!window) {
       return;
     }
@@ -152,7 +476,7 @@ export class WorkspaceManager {
     topic: string,
     payloadType: K,
     payload: WorkspaceEventPayloads[K],
-  ): Event<WorkspaceEventPayloads[K], typeof DOMAIN_METADATA> {
+  ): void {
     const event = eventDatabase.publish(
       topic,
       1,
@@ -165,7 +489,6 @@ export class WorkspaceManager {
     this.historyAggregator.apply(event);
     this.historyAggregator.hydrateProjection(this.projection);
     this.broadcastEvent(event);
-    return event;
   }
 
   private publishDomainEvents<K extends WorkspacePayloadType>(
@@ -197,59 +520,37 @@ export class WorkspaceManager {
     return events;
   }
 
-  registerWindow(window: Window): string {
-    const windowId = window.id;
-    this.windows.set(windowId, window);
+  registerWindow(window: Window): void {
+    this.window = window;
 
-    const startupWorkspaceId = this.getStartupWorkspaceId();
-    this.windowWorkspaceSelection.set(windowId, startupWorkspaceId);
-
-    const workspace = this.projection.workspaces.get(startupWorkspaceId);
-    if (!workspace || workspace.tabOrder.length === 0) {
-      if (startupWorkspaceId === DEFAULT_WORKSPACE_ID) {
-        this.createTab(windowId);
-      } else {
-        this.switchWorkspace(windowId, startupWorkspaceId);
-      }
-    } else {
-      this.switchWorkspace(windowId, startupWorkspaceId);
-    }
-    return windowId;
-  }
-
-  private getStartupWorkspaceId(): string {
-    const lastWorkspaceId = this.loadLastActiveWorkspaceIdFromHistory();
-    if (lastWorkspaceId && this.projection.workspaces.has(lastWorkspaceId)) {
-      return lastWorkspaceId;
-    }
-    return DEFAULT_WORKSPACE_ID;
-  }
-
-  private loadLastActiveWorkspaceIdFromHistory(): string | null {
+    let startupWorkspaceId = DEFAULT_WORKSPACE_ID;
     const [row] = eventDatabase.query<WorkspaceSwitchEventRow>(
       LATEST_WORKSPACE_SWITCH_QUERY,
     );
-    if (!row) {
-      return null;
+    if (row) {
+      try {
+        const payload = JSON.parse(row.payload) as { workspaceId?: string };
+        if (
+          typeof payload.workspaceId === "string" &&
+          this.projection.workspaces.has(payload.workspaceId)
+        ) {
+          startupWorkspaceId = payload.workspaceId;
+        }
+      } catch {
+        // ignore malformed payload
+      }
     }
 
-    try {
-      const payload = JSON.parse(row.payload) as { workspaceId?: string };
-      return typeof payload.workspaceId === "string"
-        ? payload.workspaceId
-        : null;
-    } catch {
-      return null;
-    }
+    this.selectedWorkspaceId = startupWorkspaceId;
+    this.switchWorkspace(window.id, startupWorkspaceId);
   }
 
-  unregisterWindow(windowId: string): void {
-    this.windows.delete(windowId);
-    this.windowWorkspaceSelection.delete(windowId);
+  unregisterWindow(_windowId: string): void {
+    this.window = null;
   }
 
-  getSelectedWorkspaceId(windowId: string): string {
-    return this.windowWorkspaceSelection.get(windowId) ?? DEFAULT_WORKSPACE_ID;
+  getSelectedWorkspaceId(_windowId: string): string {
+    return this.selectedWorkspaceId;
   }
 
   getActiveWorkspaceTopic(windowId: string): string {
@@ -277,7 +578,7 @@ export class WorkspaceManager {
 
   getSnapshot(windowId: string): WorkspaceSnapshot {
     const activeWorkspaceId = this.getSelectedWorkspaceId(windowId);
-    const window = this.windows.get(windowId);
+    const window = this.window;
     const activeItemId = window?.activeWorkspaceItemId ?? null;
 
     const tabs = this.getTabsForWorkspace(activeWorkspaceId, windowId).map(
@@ -303,16 +604,16 @@ export class WorkspaceManager {
     return this.getWorkspaceState(workspaceId)?.tabOrder ?? [];
   }
 
-  getTabKind(workspaceId: string, tabId: string): TabKind {
+  private getTabKind(workspaceId: string, tabId: string): TabKind {
     const record = this.getTabRecord(workspaceId, tabId);
     return record?.kind ?? "browser";
   }
 
   private getTabsForWorkspace(
     workspaceId: string,
-    windowId: string,
+    _windowId: string,
   ): TabSnapshot[] {
-    const window = this.windows.get(windowId);
+    const window = this.window;
     const workspace = this.getWorkspaceState(workspaceId);
     if (!window || !workspace) {
       return [];
@@ -348,13 +649,17 @@ export class WorkspaceManager {
     return workspace?.topic ?? DEFAULT_WORKSPACE_TOPIC;
   }
 
+  getWorkspaceName(workspaceId: string): string {
+    return this.getWorkspaceState(workspaceId)?.name ?? "Default";
+  }
+
   getTabWorkspaceTopic(windowId: string, tabId: string): string | null {
     const workspaceId = this.findTabWorkspace(tabId, windowId);
     return workspaceId ? this.getWorkspaceTopic(workspaceId) : null;
   }
 
   configureAgentChatClient(windowId: string, tabId: string): void {
-    const window = this.windows.get(windowId);
+    const window = this.window;
     const chat = window?.getAgentChat(tabId);
     if (!window || !chat) {
       return;
@@ -393,7 +698,7 @@ export class WorkspaceManager {
   }
 
   ensureBrowserTabMaterialized(windowId: string, tabId: string): Tab | null {
-    const window = this.windows.get(windowId);
+    const window = this.window;
     if (!window) {
       return null;
     }
@@ -425,14 +730,14 @@ export class WorkspaceManager {
     );
   }
 
-  private findTabWorkspace(tabId: string, windowId: string): string | null {
+  private findTabWorkspace(tabId: string, _windowId: string): string | null {
     for (const [workspaceId, workspace] of this.projection.workspaces) {
       if (workspace.tabs.has(tabId)) {
         return workspaceId;
       }
     }
 
-    const window = this.windows.get(windowId);
+    const window = this.window;
     if (window?.getTab(tabId) || window?.getAgentChat(tabId)) {
       return DEFAULT_WORKSPACE_ID;
     }
@@ -441,7 +746,7 @@ export class WorkspaceManager {
   }
 
   createTab(windowId: string): TabSnapshot | null {
-    const window = this.windows.get(windowId);
+    const window = this.window;
     if (!window) {
       return null;
     }
@@ -467,13 +772,9 @@ export class WorkspaceManager {
     );
     window.switchActiveTab(tabId);
 
-    this.publishDomainEvent(
-      this.getWorkspaceTopic(workspaceId),
-      "tab-activated",
-      { tabId },
-    );
+    this.publishDomainEvent(topic, "tab-activated", { tabId });
     this.notifyStateChanged();
-    this.focusAddressBar(windowId);
+    this.focusAddressBar();
 
     return {
       id: tabId,
@@ -486,7 +787,7 @@ export class WorkspaceManager {
   }
 
   submitAddressBar(windowId: string, tabId: string, input: string): boolean {
-    const window = this.windows.get(windowId);
+    const window = this.window;
     if (!window) {
       return false;
     }
@@ -536,7 +837,7 @@ export class WorkspaceManager {
       url,
     });
 
-    const tab = this.windows.get(windowId)?.getTab(tabId);
+    const tab = this.window?.getTab(tabId);
     if (tab) {
       void tab.loadURL(url);
     }
@@ -549,7 +850,7 @@ export class WorkspaceManager {
     tabId: string,
     initialMessage: string,
   ): void {
-    const window = this.windows.get(windowId);
+    const window = this.window;
     const workspaceId = this.findTabWorkspace(tabId, windowId);
     if (!window || !workspaceId) {
       return;
@@ -597,7 +898,7 @@ export class WorkspaceManager {
   }
 
   closeTab(windowId: string, tabId: string): boolean {
-    const window = this.windows.get(windowId);
+    const window = this.window;
     if (!window) {
       return false;
     }
@@ -633,7 +934,7 @@ export class WorkspaceManager {
   }
 
   switchTab(windowId: string, tabId: string): boolean {
-    const window = this.windows.get(windowId);
+    const window = this.window;
     if (!window) {
       return false;
     }
@@ -680,8 +981,8 @@ export class WorkspaceManager {
     return true;
   }
 
-  showContextDashboard(windowId: string): boolean {
-    const window = this.windows.get(windowId);
+  showContextDashboard(_windowId: string): boolean {
+    const window = this.window;
     if (!window) {
       return false;
     }
@@ -696,7 +997,7 @@ export class WorkspaceManager {
       return false;
     }
 
-    const window = this.windows.get(windowId);
+    const window = this.window;
     if (!window) {
       return false;
     }
@@ -707,7 +1008,7 @@ export class WorkspaceManager {
       workspaceId,
     });
 
-    this.windowWorkspaceSelection.set(windowId, workspaceId);
+    this.selectedWorkspaceId = workspaceId;
 
     const tabIds = this.getWorkspaceTabIds(workspaceId);
     const browserTabIds = tabIds.filter(
@@ -814,10 +1115,11 @@ export class WorkspaceManager {
       workspaceId,
     });
 
-    for (const [id, window] of this.windows) {
-      if (this.getSelectedWorkspaceId(id) === workspaceId) {
-        this.windowWorkspaceSelection.set(id, DEFAULT_WORKSPACE_ID);
-        this.switchWorkspace(id, DEFAULT_WORKSPACE_ID);
+    const window = this.window;
+    if (window) {
+      if (this.selectedWorkspaceId === workspaceId) {
+        this.selectedWorkspaceId = DEFAULT_WORKSPACE_ID;
+        this.switchWorkspace(window.id, DEFAULT_WORKSPACE_ID);
       }
 
       for (const tabId of workspace.tabOrder) {
@@ -855,7 +1157,7 @@ export class WorkspaceManager {
       return false;
     }
 
-    const window = this.windows.get(windowId);
+    const window = this.window;
     if (!window) {
       return false;
     }
@@ -865,7 +1167,6 @@ export class WorkspaceManager {
     const kind = record?.kind ?? "browser";
     const url = tab?.url ?? record?.url ?? PENDING_TAB_URL;
     const title = tab?.title ?? record?.title ?? "New Tab";
-    const history = record?.history;
     const moveId = createMoveId();
 
     const sourceTopic = this.getWorkspaceTopic(sourceWorkspaceId);
@@ -918,34 +1219,6 @@ export class WorkspaceManager {
       }
     }
 
-    for (const [id, otherWindow] of this.windows) {
-      if (
-        id !== windowId &&
-        this.getSelectedWorkspaceId(id) === targetWorkspaceId &&
-        !otherWindow.getTab(tabId) &&
-        !otherWindow.getAgentChat(tabId)
-      ) {
-        if (kind === "agent-chat") {
-          otherWindow.materializeAgentChat(tabId);
-        } else {
-          otherWindow.materializeTab(
-            tabId,
-            url,
-            (changedTabId, changedTitle, changedUrl) => {
-              this.handleTabStateChanged(
-                id,
-                changedTabId,
-                changedTitle,
-                changedUrl,
-              );
-            },
-            title,
-            history,
-          );
-        }
-      }
-    }
-
     this.notifyStateChanged();
     return true;
   }
@@ -991,21 +1264,11 @@ export class WorkspaceManager {
       this.publishDomainEvent(topic, "tab-title-changed", { tabId, title });
     }
 
-    for (const [id, window] of this.windows) {
-      if (id === windowId) {
-        continue;
-      }
-      const otherTab = window.getTab(tabId);
-      if (otherTab && otherTab.url !== url) {
-        void otherTab.loadURL(url);
-      }
-    }
-
     this.notifyStateChanged();
   }
 
   handleNavigateTab(windowId: string, tabId: string, url: string): void {
-    const window = this.windows.get(windowId);
+    const window = this.window;
     const tab = window?.getTab(tabId);
     if (!tab) {
       return;
@@ -1036,16 +1299,6 @@ export class WorkspaceManager {
     }
 
     void tab.loadURL(url);
-
-    for (const [id, otherWindow] of this.windows) {
-      if (id === windowId) {
-        continue;
-      }
-      const otherTab = otherWindow.getTab(tabId);
-      if (otherTab) {
-        void otherTab.loadURL(url);
-      }
-    }
 
     this.notifyStateChanged();
   }

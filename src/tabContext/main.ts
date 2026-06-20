@@ -27,13 +27,13 @@ export class ContextDashboard {
 
     if (is.dev && process.env["ELECTRON_RENDERER_URL"]) {
       const contextDashboardUrl = new URL(
-        "/contextDashboard/renderer/",
+        "/tabContext/renderer/",
         process.env["ELECTRON_RENDERER_URL"],
       );
       webContentsView.webContents.loadURL(contextDashboardUrl.toString());
     } else {
       webContentsView.webContents.loadFile(
-        join(__dirname, "../renderer/contextDashboard/renderer/index.html"),
+        join(__dirname, "../renderer/tabContext/renderer/index.html"),
       );
     }
 

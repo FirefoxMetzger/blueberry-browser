@@ -3,7 +3,7 @@ import type {
   ListTabCard,
   ReadTabCard,
   ToolDisplayMessage,
-} from "../agentChat/types";
+} from "../tabAgent/types";
 
 export function summarizeToolInput(
   toolName: string,
